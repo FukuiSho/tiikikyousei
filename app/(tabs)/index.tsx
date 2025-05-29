@@ -1,8 +1,9 @@
 // ホーム　地図
 
+import { Ionicons } from '@expo/vector-icons'; // ← アイコン用
 import * as Location from 'expo-location';
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Alert, StyleSheet, TouchableOpacity, View } from 'react-native';
 import MapView, { Marker } from 'react-native-maps';
 
 export default function Home() {
@@ -44,28 +45,39 @@ export default function Home() {
   }
 
   return (
-    <MapView
-      style={styles.map}
-      region={{
-        latitude: location.latitude,
-        longitude: location.longitude,
-        latitudeDelta: 0.01,
-        longitudeDelta: 0.01,
-      }}
-    >
-      <Marker
-        coordinate={{
+    <View style={styles.container}>
+      {/* 地図 */}
+      <MapView
+        style={styles.map}
+        region={{
           latitude: location.latitude,
           longitude: location.longitude,
+          latitudeDelta: 0.01,
+          longitudeDelta: 0.01,
         }}
-        title="現在地"
-        description="リアルタイムに追従中"
-      />
-    </MapView>
+      >
+        <Marker
+          coordinate={{
+            latitude: location.latitude,
+            longitude: location.longitude,
+          }}
+          title="現在地"
+          description="リアルタイムに追従中"
+        />
+      </MapView>
+
+      {/* 投稿ボタン */}
+      <TouchableOpacity style={styles.postButton} onPress={() => console.log('投稿ボタンが押された')}>
+        <Ionicons name="add" size={32} color="white" />
+      </TouchableOpacity>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
   map: {
     flex: 1,
   },
@@ -73,5 +85,18 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  postButton: {
+    position: 'absolute',
+    bottom: 30,
+    alignSelf: 'center',
+    backgroundColor: '#ff69b4',
+    borderRadius: 30,
+    padding: 16,
+    elevation: 5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
   },
 });
