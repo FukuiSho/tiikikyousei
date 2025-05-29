@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
-import { useAuth } from '../context/AuthContext';
-import { supabase } from '../lib/supabaseClient';
+import { useAuth } from '@/lib/context/AuthContext';
+import { supabase } from '@/lib/supabase/client';
 import L from 'leaflet';
 
 // Fix Leaflet default marker icon
@@ -26,7 +26,7 @@ interface LocationResponse {
   user_id: string;
   profiles: {
     username: string;
-  } | null;
+  }[];
 }
 
 function Map() {
@@ -104,11 +104,11 @@ function Map() {
 
     if (!data) return;
 
-    setLocations((data as LocationResponse[]).map(location => ({
+    setLocations(data.map((location: LocationResponse) => ({
       latitude: location.latitude,
       longitude: location.longitude,
       user_id: location.user_id,
-      username: location.profiles?.username ?? 'Unknown User'
+      username: location.profiles?.[0]?.username ?? 'Unknown User'
     })));
   };
 
@@ -141,4 +141,4 @@ function Map() {
   );
 }
 
-export default Map;
+export default Map
