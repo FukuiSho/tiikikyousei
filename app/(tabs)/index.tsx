@@ -3,11 +3,14 @@
 import { Ionicons } from '@expo/vector-icons'; // ← アイコン用
 import * as Location from 'expo-location';
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Button, Modal, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import MapView, { Marker } from 'react-native-maps';
 
 export default function Home() {
   const [location, setLocation] = useState<Location.LocationObjectCoords | null>(null);
+  const [modalVisible, setModalVisible] = useState(false);
+  const [postText, setPostText] = useState('');
+  const [imageUri, setImageUri] = useState<string | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -66,9 +69,38 @@ export default function Home() {
         />
       </MapView>
 
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={modalVisible}
+        onRequestClose={() => setModalVisible(false)}
+      >
+        <View style={styles.modalContainer}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>投稿する</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="今なにしてる？"
+              value={postText}
+              onChangeText={setPostText}
+              multiline
+            />
+            {/* 画像はまだ未実装 → 後で画像選択ボタン追加 */}
+            <View style={styles.modalButtons}>
+              <Button title="キャンセル" onPress={() => setModalVisible(false)} />
+              <Button title="投稿する" onPress={() => {
+                // 今は仮：投稿内容をログに出すだけ
+                console.log('投稿:', postText, imageUri);
+                setModalVisible(false);
+              }} />
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       {/* 投稿ボタン */}
-      <TouchableOpacity style={styles.postButton} onPress={() => console.log('投稿ボタンが押された')}>
-        <Ionicons name="add" size={32} color="white" />
+      <TouchableOpacity style={styles.postButton} onPress={() => setModalVisible(true)}>
+        <Ionicons name="add" size={36} color="#fff" />
       </TouchableOpacity>
     </View>
   );
@@ -98,5 +130,35 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.3,
     shadowRadius: 4,
+  },
+  modalContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.5)',
+  },
+  modalContent: {
+    width: '80%',
+    backgroundColor: 'white',
+    padding: 20,
+    borderRadius: 10,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 10,
+  },
+  input: {
+    height: 100,
+    borderColor: 'gray',
+    borderWidth: 1,
+    borderRadius: 5,
+    padding: 10,
+    marginBottom: 10,
+    textAlignVertical: 'top',
+  },
+  modalButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
   },
 });
