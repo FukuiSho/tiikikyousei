@@ -10,6 +10,9 @@ export default function Home() {
   const [location, setLocation] = useState<Location.LocationObjectCoords | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
   const [postText, setPostText] = useState('');
+  const [posts, setPosts] = useState<
+    { latitude: number; longitude: number; text: string }[]
+  >([]);
   const [imageUri, setImageUri] = useState<string | null>(null);
 
   useEffect(() => {
@@ -67,6 +70,19 @@ export default function Home() {
           title="現在地"
           description="リアルタイムに追従中"
         />
+        {posts.map((post, index) => (
+          //投稿マーカー
+          <Marker
+            key={index}
+            coordinate={{ latitude: post.latitude, longitude: post.longitude }}
+          >
+            <View style={styles.customMarker}>
+              <Text style={styles.customMarkerText}>
+                {post.text}
+              </Text>
+            </View>
+          </Marker>
+        ))}
       </MapView>
 
       <Modal
@@ -88,11 +104,21 @@ export default function Home() {
             {/* 画像はまだ未実装 → 後で画像選択ボタン追加 */}
             <View style={styles.modalButtons}>
               <Button title="キャンセル" onPress={() => setModalVisible(false)} />
-              <Button title="投稿する" onPress={() => {
-                // 今は仮：投稿内容をログに出すだけ
-                console.log('投稿:', postText, imageUri);
-                setModalVisible(false);
-              }} />
+              <Button
+                title="投稿する"
+                onPress={() => {
+                  if (location) {
+                    const newPost = {
+                      latitude: location.latitude,
+                      longitude: location.longitude,
+                      text: postText,
+                    };
+                    setPosts((prevPosts) => [...prevPosts, newPost]);
+                  }
+                  setPostText('');
+                  setModalVisible(false);
+                }}
+              />
             </View>
           </View>
         </View>
@@ -160,5 +186,21 @@ const styles = StyleSheet.create({
   modalButtons: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+  },
+  customMarker: {
+    backgroundColor: 'white',
+    padding: 8,
+    borderRadius: 10,
+    borderColor: '#ff69b4',
+    borderWidth: 2,
+    maxWidth: 250, // 画面に収まる適切な最大横幅
+    alignSelf: 'flex-start',     // 子要素にサイズを合わせる
+  },
+  customMarkerText: {
+    color: '#333',
+    fontSize: 14,
+    flexShrink: 1,         // ← はみ出さず縮むように
+    flexWrap: 'wrap',      // ← 折り返し可能に
+    lineHeight: 18,
   },
 });
