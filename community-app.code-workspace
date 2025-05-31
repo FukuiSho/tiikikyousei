@@ -11,13 +11,20 @@
     "editor.formatOnSave": true,
     "editor.codeActionsOnSave": {
       "source.fixAll.eslint": "explicit"
-    }
+    },
+    "git.enabled": true,
+    "git.autofetch": true,
+    "git.confirmSync": false,
+    "scm.defaultViewMode": "tree"
   },
   "extensions": {
     "recommendations": [
       "expo.vscode-expo-tools",
       "ms-vscode.vscode-typescript-next",
-      "bradlc.vscode-tailwindcss"
+      "bradlc.vscode-tailwindcss",
+      "ms-vscode.vscode-json",
+      "github.vscode-pull-request-github",
+      "eamodio.gitlens"
     ]
   }
 }
