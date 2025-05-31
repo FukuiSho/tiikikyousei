@@ -1,0 +1,23 @@
+{
+  "folders": [
+    {
+      "name": "Community App",
+      "path": "."
+    }
+  ],
+  "settings": {
+    "typescript.preferences.importModuleSpecifier": "relative",
+    "typescript.suggest.autoImports": true,
+    "editor.formatOnSave": true,
+    "editor.codeActionsOnSave": {
+      "source.fixAll.eslint": "explicit"
+    }
+  },
+  "extensions": {
+    "recommendations": [
+      "expo.vscode-expo-tools",
+      "ms-vscode.vscode-typescript-next",
+      "bradlc.vscode-tailwindcss"
+    ]
+  }
+}
