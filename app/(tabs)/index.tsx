@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import * as Location from "expo-location";
-import { collection, getDocs } from "firebase/firestore";
+import { addDoc, collection, getDocs } from "firebase/firestore";
 import React, { useEffect, useRef, useState } from "react";
 import {
   Alert,
@@ -83,8 +83,9 @@ export default function HomeScreen() {
   const slideAnim = useRef(new Animated.Value(height * 0.5)).current;
   // MapViewのref
   const mapRef = useRef<MapView>(null);
+
+  // Firebase接続確認＆データの取得してLog出力
   useEffect(() => {
-    // Firebase関係（関数実行まで）
     const fetchDataFromFirestore = async () => {
       try {
         console.log("Firebase app initialized:", app.name);
@@ -102,7 +103,9 @@ export default function HomeScreen() {
     };
 
     fetchDataFromFirestore(); // 関数実行
+  }, []);
 
+  useEffect(() => {
     (async () => {
       let { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== "granted") {
@@ -145,7 +148,7 @@ export default function HomeScreen() {
       keyboardDidHideListener?.remove();
     };
   }, []);
-  const handleCreatePost = () => {
+  const handleCreatePost = async () => {
     if (!newPost.content.trim() || !newPost.author.trim()) {
       Alert.alert("エラー", "全ての項目を入力してください");
       return;
@@ -156,8 +159,21 @@ export default function HomeScreen() {
       return;
     }
 
+    // Firestoreに書き込み
+    const docRef = await addDoc(collection(db, "posts"), {
+      content: newPost.content,
+      author: newPost.author,
+      location: {
+        latitude: location.coords.latitude,
+        longitude: location.coords.longitude,
+      },
+      timestamp: new Date(),
+      reactions: {},
+      reactionCounts: {},
+    });
+    // Firestoreを基に投稿のUI更新
     const post: Post = {
-      id: Date.now().toString(),
+      id: docRef.id,
       content: newPost.content,
       author: newPost.author,
       location: {
@@ -430,6 +446,7 @@ export default function HomeScreen() {
             description="あなたの現在位置"
             pinColor="blue"
           />
+
           {posts.map((post) => (
             <Marker
               key={post.id}
