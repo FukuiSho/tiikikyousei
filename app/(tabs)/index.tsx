@@ -2,9 +2,11 @@
 
 import { Ionicons } from '@expo/vector-icons'; // ← アイコン用
 import * as Location from 'expo-location';
+import { collection, getDocs } from 'firebase/firestore';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Button, Modal, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import MapView, { Marker } from 'react-native-maps';
+import { app, db } from '../../src/firebase';
 
 export default function Home() {
   const [location, setLocation] = useState<Location.LocationObjectCoords | null>(null);
@@ -13,6 +15,25 @@ export default function Home() {
   const [imageUri, setImageUri] = useState<string | null>(null);
 
   useEffect(() => {
+    // Firebase関係（関数実行まで）
+    const fetchDataFromFirestore = async () => {
+      try{
+        console.log("Firebase app initialized:", app.name);
+        console.log("Firestore instance:", db); // dbオブジェクトが利用可能か確認
+      
+        const querySnapshot = await getDocs(collection(db, "users"));
+        console.log("--- Documents in 'users' collection ---");
+        querySnapshot.forEach((doc) => {
+          console.log(`${doc.id} => `, doc.data()); // ドキュメントのIDとデータをログに出力
+        });
+        console.log("--------------------------------------");
+      } catch(error){
+        console.error("Error fetching or adding data: ", error);
+      }
+    };
+
+    fetchDataFromFirestore(); // 関数実行
+
     (async () => {
       let { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
