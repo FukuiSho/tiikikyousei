@@ -1,8 +1,16 @@
-const { getDefaultConfig } = require('@expo/metro-config');
+const { getDefaultConfig } = require("@expo/metro-config");
 
 const config = getDefaultConfig(__dirname);
 
-// ネイティブ専用設定（Android/iOS）
-config.resolver.platforms = ['ios', 'android', 'native'];
+// プラットフォーム設定
+config.resolver.platforms = ["web", "ios", "android", "native"];
+
+// Web環境での設定
+if (process.env.EXPO_PLATFORM === "web") {
+  config.resolver.alias = {
+    ...(config.resolver.alias || {}),
+    "react-native-maps": false, // Web環境では無効化
+  };
+}
 
 module.exports = config;
