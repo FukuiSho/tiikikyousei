@@ -5,6 +5,7 @@ import {
   Alert,
   Animated,
   Dimensions,
+  Image,
   Keyboard,
   KeyboardAvoidingView,
   Modal,
@@ -19,6 +20,16 @@ import {
 } from "react-native";
 import MapView, { Marker } from "react-native-maps";
 
+// 使うリアクションの種類をここで定義します
+const reactionImages: { [key: string]: any } = {
+  "1": require("../../assets/images/face1.png"),
+  "2": require("../../assets/images/face2.png"),
+  "3": require("../../assets/images/face3.png"),
+  "4": require("../../assets/images/face4.png"),
+  "5": require("../../assets/images/face5.png"),
+  "6": require("../../assets/images/face6.png"),
+};
+
 interface Post {
   id: string;
   content: string;
@@ -30,10 +41,10 @@ interface Post {
   author: string;
   replies?: Reply[];
   reactions?: {
-    [userId: string]: string; // userId -> emoji
+    [userId: string]: string; // userId -> pickerLabel
   };
   reactionCounts?: {
-    [emoji: string]: number; // emoji -> count
+    [pickerLabel: string]: number; // pickerLabel -> count
   };
 }
 
@@ -46,7 +57,7 @@ interface Reply {
     [userId: string]: string;
   };
   reactionCounts?: {
-    [emoji: string]: number;
+    [pickerLabel: string]: number;
   };
 }
 
@@ -263,7 +274,7 @@ export default function HomeScreen() {
 
   const handleReaction = (
     postId: string,
-    emoji: string,
+    pickerLabel: string,
     isReply: boolean = false,
     replyId?: string
   ) => {
@@ -280,15 +291,15 @@ export default function HomeScreen() {
                 // 既存のリアクションを確認
                 const currentReaction = reactions[currentUserId];
 
-                if (currentReaction === emoji) {
+                if (currentReaction === pickerLabel) {
                   // 同じ絵文字の場合は削除
                   delete reactions[currentUserId];
-                  reactionCounts[emoji] = Math.max(
+                  reactionCounts[pickerLabel] = Math.max(
                     0,
-                    (reactionCounts[emoji] || 0) - 1
+                    (reactionCounts[pickerLabel] || 0) - 1
                   );
-                  if (reactionCounts[emoji] === 0) {
-                    delete reactionCounts[emoji];
+                  if (reactionCounts[pickerLabel] === 0) {
+                    delete reactionCounts[pickerLabel];
                   }
                 } else {
                   // 異なる絵文字または新規の場合
@@ -303,8 +314,9 @@ export default function HomeScreen() {
                     }
                   }
                   // 新しいリアクションを追加
-                  reactions[currentUserId] = emoji;
-                  reactionCounts[emoji] = (reactionCounts[emoji] || 0) + 1;
+                  reactions[currentUserId] = pickerLabel;
+                  reactionCounts[pickerLabel] =
+                    (reactionCounts[pickerLabel] || 0) + 1;
                 }
 
                 return {
@@ -328,15 +340,15 @@ export default function HomeScreen() {
             // 既存のリアクションを確認
             const currentReaction = reactions[currentUserId];
 
-            if (currentReaction === emoji) {
+            if (currentReaction === pickerLabel) {
               // 同じ絵文字の場合は削除
               delete reactions[currentUserId];
-              reactionCounts[emoji] = Math.max(
+              reactionCounts[pickerLabel] = Math.max(
                 0,
-                (reactionCounts[emoji] || 0) - 1
+                (reactionCounts[pickerLabel] || 0) - 1
               );
-              if (reactionCounts[emoji] === 0) {
-                delete reactionCounts[emoji];
+              if (reactionCounts[pickerLabel] === 0) {
+                delete reactionCounts[pickerLabel];
               }
             } else {
               // 異なる絵文字または新規の場合
@@ -351,8 +363,9 @@ export default function HomeScreen() {
                 }
               }
               // 新しいリアクションを追加
-              reactions[currentUserId] = emoji;
-              reactionCounts[emoji] = (reactionCounts[emoji] || 0) + 1;
+              reactions[currentUserId] = pickerLabel;
+              reactionCounts[pickerLabel] =
+                (reactionCounts[pickerLabel] || 0) + 1;
             }
 
             return {
@@ -371,10 +384,17 @@ export default function HomeScreen() {
     isReply: boolean = false,
     replyId?: string
   ) => {
-    const reactions = ["👍", "❤️", "😊", "😂", "😮", "😢"];
-    const buttons = reactions.map((emoji) => ({
-      text: emoji,
-      onPress: () => handleReaction(postId, emoji, isReply, replyId),
+    const reactions = [
+      "1",
+      "2",
+      "3",
+      "4",
+      "5",
+      "6",
+    ];
+    const buttons = reactions.map((pickerLabel) => ({
+      text: pickerLabel,
+      onPress: () => handleReaction(postId, pickerLabel, isReply, replyId),
     }));
 
     buttons.push({
@@ -505,17 +525,23 @@ export default function HomeScreen() {
                     Object.keys(post.reactionCounts).length > 0 && (
                       <View style={styles.reactionsDisplay}>
                         {Object.entries(post.reactionCounts).map(
-                          ([emoji, count]) => (
+                          ([pickerLabel, count]) => (
                             <TouchableOpacity
-                              key={emoji}
+                              key={pickerLabel}
                               style={[
                                 styles.reactionItem,
-                                post.reactions?.[currentUserId] === emoji &&
-                                  styles.reactionItemActive,
+                                post.reactions?.[currentUserId] ===
+                                  pickerLabel && styles.reactionItemActive,
                               ]}
-                              onPress={() => handleReaction(post.id, emoji)}
+                              onPress={() =>
+                                handleReaction(post.id, pickerLabel)
+                              }
                             >
-                              <Text style={styles.reactionEmoji}>{emoji}</Text>
+                              <Image
+                                source={reactionImages[pickerLabel]}
+                                style={styles.reactionImage}
+                                resizeMode="contain"
+                              />
                               <Text style={styles.reactionCount}>{count}</Text>
                             </TouchableOpacity>
                           )
@@ -576,25 +602,26 @@ export default function HomeScreen() {
                             Object.keys(reply.reactionCounts).length > 0 && (
                               <View style={styles.replyReactionsDisplay}>
                                 {Object.entries(reply.reactionCounts).map(
-                                  ([emoji, count]) => (
+                                  ([pickerLabel, count]) => (
                                     <TouchableOpacity
-                                      key={emoji}
+                                      key={pickerLabel}
                                       style={[
                                         styles.replyReactionItem,
                                         reply.reactions?.[currentUserId] ===
-                                          emoji && styles.reactionItemActive,
+                                          pickerLabel &&
+                                          styles.reactionItemActive,
                                       ]}
                                       onPress={() =>
                                         handleReaction(
                                           post.id,
-                                          emoji,
+                                          pickerLabel,
                                           true,
                                           reply.id
                                         )
                                       }
                                     >
-                                      <Text style={styles.reactionEmoji}>
-                                        {emoji}
+                                      <Text style={styles.reactionpickerLabel}>
+                                        {pickerLabel}
                                       </Text>
                                       <Text style={styles.reactionCount}>
                                         {count}
@@ -1135,7 +1162,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#2196f3",
   },
-  reactionEmoji: {
+  reactionpickerLabel: {
     fontSize: 14,
     marginRight: 4,
   },
@@ -1143,6 +1170,11 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "#666",
     fontWeight: "500",
+  },
+  reactionImage: {
+    width: 20,
+    height: 20,
+    marginRight: 4,
   },
   // リプライアクション関連
   replyActions: {
