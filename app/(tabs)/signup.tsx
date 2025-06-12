@@ -10,7 +10,7 @@ import {
   View,
 } from 'react-native';
 
-const SignupScreen: React.FC = () => {
+const Signup: React.FC = () => {
   // 各入力欄の値を保持するstate
   const [email, setEmail] = useState<string>('');
   const [password, setPassword] = useState<string>('');
@@ -140,4 +140,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default SignupScreen;
+export default Signup;
