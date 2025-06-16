@@ -22,6 +22,7 @@ import MapView, { Marker } from "react-native-maps";
 // 型とユーティリティのインポート
 import { styles } from "../../components/utils/styles";
 import { Post, Reply } from "../../components/utils/types";
+import { saveLocationToFirestore } from "../../services/locationService";
 
 // 使うリアクションの種類をここで定義します
 const reactionImages: { [key: string]: any } = {
@@ -57,14 +58,41 @@ export default function HomeScreen() {
   const [newReply, setNewReply] = useState({
     content: "",
     author: "",
-  });
-  const [keyboardHeight, setKeyboardHeight] = useState(0);
+  });  const [keyboardHeight, setKeyboardHeight] = useState(0);
   const [currentUserId] = useState("user-" + Date.now()); // 簡易的なユーザーID
+  // const [locationHistory, setLocationHistory] = useState<LocationData[]>([]);
+  const [isLocationTracking, setIsLocationTracking] = useState(false);
+  
   // アニメーション用の値（初期値は画面外の下に設定）
   const slideAnim = useRef(new Animated.Value(height * 0.5)).current;
   // MapViewのref
-  const mapRef = useRef<MapView>(null);
-  useEffect(() => {
+  const mapRef = useRef<MapView>(null);  // 位置情報取得のインターバル参照
+  const locationIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);  useEffect(() => {
+    // 1分おきに位置情報を取得してFirestoreに保存する関数
+    const startLocationTracking = () => {
+      setIsLocationTracking(true);
+      console.log("位置情報の定期取得を開始しました（1分間隔）");
+
+      locationIntervalRef.current = setInterval(async () => {
+        try {
+          console.log("位置情報を取得中...");
+          const savedLocation = await saveLocationToFirestore(currentUserId);
+          
+          if (savedLocation) {
+            // 現在地を更新
+            const currentLocation = await Location.getCurrentPositionAsync({});
+            setLocation(currentLocation);
+              // 位置情報履歴を更新
+            // setLocationHistory(prev => [savedLocation, ...prev.slice(0, 49)]); // 最新50件を保持
+            
+            console.log(`位置情報を保存しました: ${savedLocation.latitude}, ${savedLocation.longitude}`);
+          }
+        } catch (error) {
+          console.error("位置情報の定期取得でエラーが発生しました:", error);
+        }
+      }, 60000); // 60秒（1分）間隔
+    };
+
     (async () => {
       let { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== "granted") {
@@ -73,14 +101,35 @@ export default function HomeScreen() {
       }
 
       let currentLocation = await Location.getCurrentPositionAsync({});
-      setLocation(currentLocation); // テスト用の投稿を追加
+      setLocation(currentLocation);      // 初回の位置情報をFirestoreに保存
+      const savedLocation = await saveLocationToFirestore(currentUserId);
+      if (savedLocation) {
+        // setLocationHistory([savedLocation]);
+        console.log("初回位置情報を保存しました");
+      }
+
+      // 1分おきの位置情報取得を開始
+      startLocationTracking();
+    })();
+
+    // コンポーネントがアンマウントされるときにインターバルをクリア
+    return () => {
+      if (locationIntervalRef.current) {
+        clearInterval(locationIntervalRef.current);
+      }
+    };
+  }, [currentUserId]);
+
+  // テスト用の投稿を追加
+  useEffect(() => {
+    if (location) {
       const testPost: Post = {
         id: "test-1",
         content: "これはテスト投稿です。",
         author: "テストユーザー",
         location: {
-          latitude: currentLocation.coords.latitude,
-          longitude: currentLocation.coords.longitude,
+          latitude: location.coords.latitude,
+          longitude: location.coords.longitude,
         },
         timestamp: new Date(),
         replies: [],
@@ -88,8 +137,8 @@ export default function HomeScreen() {
         reactionCounts: {},
       };
       setPosts([testPost]);
-    })();
-  }, []);
+    }
+  }, [location]);
 
   // キーボードイベントリスナー
   useEffect(() => {
@@ -356,14 +405,7 @@ export default function HomeScreen() {
     isReply: boolean = false,
     replyId?: string
   ) => {
-    const reactions = [
-      "1",
-      "2",
-      "3",
-      "4",
-      "5",
-      "6",
-    ];
+    const reactions = ["1", "2", "3", "4", "5", "6"];
     const buttons = reactions.map((pickerLabel) => ({
       text: pickerLabel,
       onPress: () => handleReaction(postId, pickerLabel, isReply, replyId),
@@ -377,9 +419,20 @@ export default function HomeScreen() {
     Alert.alert("リアクションを選択", "", buttons, { cancelable: true });
   };
   return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
+    <SafeAreaView style={styles.container}>      <View style={styles.header}>
         <Text style={styles.headerTitle}>地域共生アプリ</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+          <View style={{
+            width: 8,
+            height: 8,
+            borderRadius: 4,
+            backgroundColor: isLocationTracking ? '#4CAF50' : '#FFC107',
+            marginRight: 8
+          }} />
+          <Text style={{ fontSize: 12, color: '#666' }}>
+            {isLocationTracking ? '位置追跡中' : '待機中'}
+          </Text>
+        </View>
       </View>{" "}
       {location ? (
         <MapView
@@ -511,7 +564,11 @@ export default function HomeScreen() {
                             >
                               <Image
                                 source={reactionImages[pickerLabel]}
-                                style={{ width: 20, height: 20, marginRight: 4 }}
+                                style={{
+                                  width: 20,
+                                  height: 20,
+                                  marginRight: 4,
+                                }}
                                 resizeMode="contain"
                               />
                               <Text style={styles.reactionCount}>{count}</Text>
@@ -592,7 +649,9 @@ export default function HomeScreen() {
                                         )
                                       }
                                     >
-                                      <Text style={{ fontSize: 14, marginRight: 4 }}>
+                                      <Text
+                                        style={{ fontSize: 14, marginRight: 4 }}
+                                      >
                                         {pickerLabel}
                                       </Text>
                                       <Text style={styles.reactionCount}>
@@ -739,7 +798,8 @@ export default function HomeScreen() {
                 <Text style={styles.submitButtonText}>投稿する</Text>
               </TouchableOpacity>
             </View>
-          </View>        </KeyboardAvoidingView>
+          </View>{" "}
+        </KeyboardAvoidingView>
       </Modal>
     </SafeAreaView>
   );
