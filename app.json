@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "tiikikyousei",
+    "name": "地域協生",
     "slug": "tiikikyousei",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -25,6 +25,12 @@
     },
     "plugins": [
       "expo-router",
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "This app needs access to location to show your position on the map and connect with nearby community members."
+        }
+      ],
       [
         "expo-splash-screen",
         {
