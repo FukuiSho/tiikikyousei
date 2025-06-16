@@ -7,12 +7,14 @@ import * as SplashScreen from 'expo-splash-screen';
 import 'react-native-reanimated';
 
 import { useColorScheme } from '@/hooks/useColorScheme';
-import { AuthProvider } from '@/lib/context/AuthContext';
+import { AuthProvider } from '@/lib/context/AuthContext'
+import { useFrameworkReady } from '@/hooks/useFrameworkReady';
 
 // Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
+  useFrameworkReady();
   const colorScheme = useColorScheme();
   const [loaded] = useFonts({
     'Inter-Regular': Inter_400Regular,
