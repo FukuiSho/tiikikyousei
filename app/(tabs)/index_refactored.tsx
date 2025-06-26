@@ -5,15 +5,15 @@ import {
   Alert,
   Animated,
   Dimensions,
-  Platform,
   SafeAreaView,
   Text,
   TouchableOpacity,
   View,
 } from "react-native";
+import MapView from "react-native-maps";
 
 // 型とコンポーネントのインポート
-import { MapComponentWrapper } from "../../components/MapComponentWrapper";
+import { MapComponent } from "../../components/MapComponent";
 import { MessageListComponent } from "../../components/MessageListComponent";
 import { PostModalComponent } from "../../components/PostModalComponent";
 import { styles } from "../../components/utils/styles";
@@ -24,7 +24,10 @@ import {
   selectImageFromLibrary,
   showImagePickerOptions,
 } from "../../components/utils/imageUtils";
-import { showReactionPicker } from "../../components/utils/reactionUtils";
+import {
+  handleReaction,
+  showReactionPicker,
+} from "../../components/utils/reactionUtils";
 
 const { height } = Dimensions.get("window");
 
@@ -64,9 +67,10 @@ export default function HomeScreen() {
     author: "",
   });
   const [currentUserId] = useState("user-" + Date.now());
+
   // アニメーション用の値
   const slideAnim = useRef(new Animated.Value(height * 0.5)).current;
-  const mapRef = useRef<any>(null);
+  const mapRef = useRef<MapView>(null);
 
   // ========== 初期化とライフサイクル ==========
   useEffect(() => {
@@ -81,6 +85,7 @@ export default function HomeScreen() {
       setLocation(location);
     })();
   }, []);
+
   // ========== 投稿関連の関数 ==========
   const handleCreatePost = () => {
     if ((!newPost.content.trim() && !selectedImage) || !newPost.author.trim()) {
@@ -111,19 +116,12 @@ export default function HomeScreen() {
       reactionCounts: {},
     };
 
-    // 即時反映：まず投稿を追加
     setPosts([...posts, post]);
-
-    // UI状態をリセット
     setNewPost({ content: "", author: "", image: "" });
     setSelectedImage(null);
     setImagePosition(null);
     setModalVisible(false);
-
-    // 成功メッセージは非同期で表示（UIをブロックしない）
-    setTimeout(() => {
-      Alert.alert("成功", "投稿が作成されました！");
-    }, 100);
+    Alert.alert("成功", "投稿が作成されました！");
   };
 
   const handleCancelPost = () => {
@@ -131,20 +129,21 @@ export default function HomeScreen() {
     setSelectedImage(null);
     setImagePosition(null);
     setModalVisible(false);
-  }; // ========== 地図関連の関数 ==========
+  };
+
+  // ========== 地図関連の関数 ==========
   const handleMarkerPress = (post: Post) => {
     setSelectedPost(post);
     setMessageListVisible(true);
 
-    if (mapRef.current && location && Platform.OS !== "web") {
-      // アイコンが地図の上部中央に来るように調整（緯度を上にオフセット）
-      const offsetLatitude = post.location.latitude + 0.002; // より大きなオフセットで上部に配置
+    if (mapRef.current && location) {
+      const offsetLatitude = post.location.latitude + 0.001;
       mapRef.current.animateToRegion(
         {
           latitude: offsetLatitude,
           longitude: post.location.longitude,
-          latitudeDelta: 0.008, // ズームレベルも少し広く
-          longitudeDelta: 0.008,
+          latitudeDelta: 0.005,
+          longitudeDelta: 0.005,
         },
         1000
       );
@@ -158,7 +157,7 @@ export default function HomeScreen() {
   };
 
   const handleCloseMessageList = () => {
-    if (mapRef.current && location && Platform.OS !== "web") {
+    if (mapRef.current && location) {
       mapRef.current.animateToRegion(
         {
           latitude: location.coords.latitude,
@@ -190,6 +189,7 @@ export default function HomeScreen() {
     }
     setExpandedReplies(newExpanded);
   };
+
   const handleReplySubmit = (postId: string) => {
     if (!newReply.content.trim() || !newReply.author.trim()) {
       Alert.alert("エラー", "内容と投稿者名を入力してください");
@@ -205,52 +205,37 @@ export default function HomeScreen() {
       reactionCounts: {},
     };
 
-    // 即時反映：まずリプライを追加
-    const updatedPosts = posts.map((post) => {
-      if (post.id === postId) {
-        return {
-          ...post,
-          replies: [...(post.replies || []), reply],
-        };
-      }
-      return post;
-    });
+    setPosts(
+      posts.map((post) => {
+        if (post.id === postId) {
+          return {
+            ...post,
+            replies: [...(post.replies || []), reply],
+          };
+        }
+        return post;
+      })
+    );
 
-    setPosts(updatedPosts);
-
-    // selectedPostも更新（即時反映のため）
-    if (selectedPost && selectedPost.id === postId) {
-      setSelectedPost({
-        ...selectedPost,
-        replies: [...(selectedPost.replies || []), reply],
-      });
-    }
-
-    // UI状態をリセット
     setNewReply({ content: "", author: "" });
     setReplyMode(null);
-
-    // 成功メッセージは非同期で表示（UIをブロックしない）
-    setTimeout(() => {
-      Alert.alert("成功", "返信が投稿されました！");
-    }, 100);
+    Alert.alert("成功", "返信が投稿されました！");
   };
+
   // ========== 画像選択関連の関数 ==========
   const handleSelectImageFromLibrary = async () => {
     const imageUri = await selectImageFromLibrary();
     if (imageUri) {
-      // 即時反映：UI状態を即座に更新
       setSelectedImage(imageUri);
-      setNewPost((prev) => ({ ...prev, image: imageUri }));
+      setNewPost({ ...newPost, image: imageUri });
     }
   };
 
   const handleSelectImageFromCamera = async () => {
     const imageUri = await selectImageFromCamera();
     if (imageUri) {
-      // 即時反映：UI状態を即座に更新
       setSelectedImage(imageUri);
-      setNewPost((prev) => ({ ...prev, image: imageUri }));
+      setNewPost({ ...newPost, image: imageUri });
     }
   };
 
@@ -262,183 +247,48 @@ export default function HomeScreen() {
   };
 
   const removeSelectedImage = () => {
-    // 即時反映：画像を即座に削除
     setSelectedImage(null);
-    setNewPost((prev) => ({ ...prev, image: "" }));
-  }; // ========== リアクション関連の関数 ==========
+    setNewPost({ ...newPost, image: "" });
+  };
+
+  // ========== リアクション関連の関数 ==========
   const handlePostReaction = (
     postId: string,
     emoji: string,
     isReply: boolean = false,
     replyId?: string
   ) => {
-    try {
-      // 即時反映：まずpostsを更新
-      const updatedPosts = posts.map((post) => {
-        if (post.id === postId) {
-          if (isReply && replyId) {
-            // リプライのリアクション処理
-            const updatedReplies = (post.replies || []).map((reply) => {
-              if (reply.id === replyId) {
-                const reactions = { ...(reply.reactions || {}) };
-                const reactionCounts = { ...(reply.reactionCounts || {}) };
-                const currentReaction = reactions[currentUserId];
-
-                if (currentReaction === emoji) {
-                  // 同じリアクションを削除
-                  delete reactions[currentUserId];
-                  reactionCounts[emoji] = Math.max(
-                    0,
-                    (reactionCounts[emoji] || 0) - 1
-                  );
-                  if (reactionCounts[emoji] === 0) {
-                    delete reactionCounts[emoji];
-                  }
-                } else {
-                  // 既存のリアクションを削除（あれば）
-                  if (currentReaction) {
-                    reactionCounts[currentReaction] = Math.max(
-                      0,
-                      (reactionCounts[currentReaction] || 0) - 1
-                    );
-                    if (reactionCounts[currentReaction] === 0) {
-                      delete reactionCounts[currentReaction];
-                    }
-                  }
-                  // 新しいリアクションを追加
-                  reactions[currentUserId] = emoji;
-                  reactionCounts[emoji] = (reactionCounts[emoji] || 0) + 1;
-                }
-
-                return {
-                  ...reply,
-                  reactions,
-                  reactionCounts,
-                };
-              }
-              return reply;
-            });
-
-            return {
-              ...post,
-              replies: updatedReplies,
-            };
-          } else {
-            // 投稿のリアクション処理
-            const reactions = { ...(post.reactions || {}) };
-            const reactionCounts = { ...(post.reactionCounts || {}) };
-            const currentReaction = reactions[currentUserId];
-
-            if (currentReaction === emoji) {
-              // 同じリアクションを削除
-              delete reactions[currentUserId];
-              reactionCounts[emoji] = Math.max(
-                0,
-                (reactionCounts[emoji] || 0) - 1
-              );
-              if (reactionCounts[emoji] === 0) {
-                delete reactionCounts[emoji];
-              }
-            } else {
-              // 既存のリアクションを削除（あれば）
-              if (currentReaction) {
-                reactionCounts[currentReaction] = Math.max(
-                  0,
-                  (reactionCounts[currentReaction] || 0) - 1
-                );
-                if (reactionCounts[currentReaction] === 0) {
-                  delete reactionCounts[currentReaction];
-                }
-              }
-              // 新しいリアクションを追加
-              reactions[currentUserId] = emoji;
-              reactionCounts[emoji] = (reactionCounts[emoji] || 0) + 1;
-            }
-
-            return {
-              ...post,
-              reactions,
-              reactionCounts,
-            };
-          }
-        }
-        return post;
-      });
-
-      // 即時反映：postsを更新
-      setPosts(updatedPosts);
-
-      // selectedPostも更新（即時反映のため）
-      if (selectedPost && selectedPost.id === postId) {
-        const targetPost = updatedPosts.find((post) => post.id === postId);
-        if (targetPost) {
-          setSelectedPost(targetPost);
-        }
-      }
-    } catch (error) {
-      console.error("リアクション処理でエラーが発生しました:", error);
-      Alert.alert("エラー", "リアクションの処理中にエラーが発生しました");
-    }
+    handleReaction(
+      posts,
+      setPosts,
+      postId,
+      emoji,
+      currentUserId,
+      isReply,
+      replyId
+    );
   };
+
   const handleShowReactionPicker = (
     postId: string,
     isReply: boolean = false,
     replyId?: string
   ) => {
-    try {
-      showReactionPicker(postId, handlePostReaction, isReply, replyId);
-    } catch (error) {
-      console.error("リアクションピッカー表示でエラーが発生しました:", error);
-      Alert.alert(
-        "エラー",
-        "リアクション選択画面の表示中にエラーが発生しました"
-      );
-    }
-  };
-
-  // ========== メッセージリストスライド関数 ==========
-  const handleSlideUp = () => {
-    // メッセージリストエリアを上にスライドして地図エリアを拡大
-    Animated.timing(slideAnim, {
-      toValue: -height * 0.3, // 画面の30%上にスライド
-      duration: 300,
-      useNativeDriver: false,
-    }).start();
-  };
-
-  const handleSlideToNormal = () => {
-    // メッセージリストエリアを通常位置に戻す
-    Animated.timing(slideAnim, {
-      toValue: 0,
-      duration: 300,
-      useNativeDriver: false,
-    }).start();
+    showReactionPicker(postId, handlePostReaction, isReply, replyId);
   };
 
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.headerTitle}>地域共生アプリ</Text>
-      </View>{" "}
+      </View>
       {/* 地図エリア */}
-      <Animated.View
-        style={[
-          styles.mapContainer,
-          {
-            height: Animated.add(
-              height * 0.5, // 基本の地図エリア高さ（画面の50%）
-              Animated.multiply(slideAnim, -1) // slideAnimがマイナスなので逆転
-            ),
-          },
-        ]}
-      >
-        <MapComponentWrapper
-          location={location}
-          posts={posts}
-          onMarkerPress={handleMarkerPress}
-          mapRef={mapRef}
-        />{" "}
-      </Animated.View>
+      <MapComponent
+        location={location}
+        posts={posts}
+        onMarkerPress={handleMarkerPress}
+        mapRef={mapRef}
+      />{" "}
       {/* メッセージリストエリア */}
       <MessageListComponent
         visible={messageListVisible}
@@ -457,8 +307,8 @@ export default function HomeScreen() {
         onReplyReactionPress={(postId, replyId) =>
           handleShowReactionPicker(postId, true, replyId)
         }
-        onSlideUp={handleSlideUp}
-        onSlideToNormal={handleSlideToNormal}
+        onSlideUp={() => {}} // ダミー関数を追加
+        onSlideToNormal={() => {}} // ダミー関数を追加
       />
       {/* フローティング投稿ボタン */}
       <TouchableOpacity
