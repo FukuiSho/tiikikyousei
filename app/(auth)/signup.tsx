@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import {
   Alert,
-  Button, // 画面上部のノッチやステータスバーを考慮
-  Platform, // 登録ボタンタップ時の簡易的なフィードバック用
+  Button,
+  Platform,
   SafeAreaView,
   StyleSheet,
   Text,
@@ -10,7 +10,8 @@ import {
   View,
 } from 'react-native';
 
-const Signup: React.FC = () => {
+// コンポーネント名は大文字で始めるのが慣例です
+const SignupScreen: React.FC = () => {
   // 各入力欄の値を保持するstate
   const [email, setEmail] = useState<string>('');
   const [password, setPassword] = useState<string>('');
@@ -48,6 +49,7 @@ const Signup: React.FC = () => {
     );
 
     // 登録成功後の画面遷移などはここに追加します
+    // たとえば、特定の画面に遷移したい場合、router.push() などのナビゲーションライブラリの機能を使います
   };
 
   return (
@@ -105,7 +107,7 @@ const Signup: React.FC = () => {
           color={Platform.OS === 'ios' ? '#007AFF' : '#2196F3'} // OSによるボタン色の調整例
         />
 
-        {/* 他の要素（ログインリンクなど）はここに追加できます */}
+        {/* 他の要素（ログインリンクなど）はここに追加できますが、結合しない場合は不要です */}
       </View>
     </SafeAreaView>
   );
@@ -120,8 +122,8 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     justifyContent: 'center', // 垂直方向の中央揃え
-    alignItems: 'center',   // 水平方向の中央揃え
-    padding: 20,            // パディング
+    alignItems: 'center',    // 水平方向の中央揃え
+    padding: 20,             // パディング
   },
   title: {
     fontSize: 28,
@@ -129,15 +131,15 @@ const styles = StyleSheet.create({
     marginBottom: 30, // タイトルの下部にスペース
   },
   input: {
-    width: '100%',          // 親要素の幅いっぱいに
-    padding: 12,            // 入力欄の内側のパディング
-    marginBottom: 15,       // 各入力欄の下部のスペース
-    borderWidth: 1,         // 枠線
-    borderColor: '#ccc',    // 枠線の色
-    borderRadius: 8,        // 角の丸み
-    backgroundColor: '#fff',// 入力欄の背景色
+    width: '100%',           // 親要素の幅いっぱいに
+    padding: 12,             // 入力欄の内側のパディング
+    marginBottom: 15,        // 各入力欄の下部のスペース
+    borderWidth: 1,          // 枠線
+    borderColor: '#ccc',     // 枠線の色
+    borderRadius: 8,         // 角の丸み
+    backgroundColor: '#fff', // 入力欄の背景色
     fontSize: 16,
   },
 });
 
-export default Signup;
+export default SignupScreen;
