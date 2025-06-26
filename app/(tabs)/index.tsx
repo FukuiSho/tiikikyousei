@@ -58,58 +58,90 @@ export default function HomeScreen() {
   const [newReply, setNewReply] = useState({
     content: "",
     author: "",
-  });  const [keyboardHeight, setKeyboardHeight] = useState(0);
-  const [currentUserId] = useState("user-" + Date.now()); // 簡易的なユーザーID
+  });
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+  const [currentUserId] = useState(() => "user-" + Date.now()); // 簡易的なユーザーID（初期化時のみ生成）
   // const [locationHistory, setLocationHistory] = useState<LocationData[]>([]);
   const [isLocationTracking, setIsLocationTracking] = useState(false);
-  
+
   // アニメーション用の値（初期値は画面外の下に設定）
   const slideAnim = useRef(new Animated.Value(height * 0.5)).current;
   // MapViewのref
-  const mapRef = useRef<MapView>(null);  // 位置情報取得のインターバル参照
-  const locationIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);  useEffect(() => {
-    // 1分おきに位置情報を取得してFirestoreに保存する関数
+  const mapRef = useRef<MapView>(null); // 位置情報取得のインターバル参照
+  const locationIntervalRef = useRef<ReturnType<typeof setInterval> | null>(
+    null
+  );
+  useEffect(() => {
+    // 現在のユーザーIDを取得（初回レンダリング時の値を使用）
+    const userId = currentUserId; // 1分おきに位置情報を取得してFirestoreに保存する関数
     const startLocationTracking = () => {
       setIsLocationTracking(true);
       console.log("位置情報の定期取得を開始しました（1分間隔）");
 
       locationIntervalRef.current = setInterval(async () => {
         try {
-          console.log("位置情報を取得中...");
-          const savedLocation = await saveLocationToFirestore(currentUserId);
-          
+          console.log("定期取得：位置情報を取得中...");
+          const savedLocation = await saveLocationToFirestore(userId);
+
           if (savedLocation) {
             // 現在地を更新
-            const currentLocation = await Location.getCurrentPositionAsync({});
+            console.log("定期取得：現在地を再取得中...");
+            const currentLocation = await Location.getCurrentPositionAsync({
+              accuracy: Location.Accuracy.High,
+            });
             setLocation(currentLocation);
-              // 位置情報履歴を更新
+            // 位置情報履歴を更新
             // setLocationHistory(prev => [savedLocation, ...prev.slice(0, 49)]); // 最新50件を保持
-            
-            console.log(`位置情報を保存しました: ${savedLocation.latitude}, ${savedLocation.longitude}`);
+
+            console.log(
+              `定期取得：位置情報を保存しました: ${savedLocation.latitude}, ${savedLocation.longitude}`
+            );
+          } else {
+            console.error("定期取得：位置情報の保存に失敗しました");
           }
         } catch (error) {
           console.error("位置情報の定期取得でエラーが発生しました:", error);
         }
-      }, 60000); // 60秒（1分）間隔
+      }, 5000); // 60秒（1分）間隔
     };
-
     (async () => {
-      let { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== "granted") {
-        Alert.alert("エラー", "位置情報の許可が必要です");
-        return;
-      }
+      try {
+        console.log("位置情報の許可を要求中...");
+        let { status } = await Location.requestForegroundPermissionsAsync();
+        console.log("位置情報の許可ステータス:", status);
 
-      let currentLocation = await Location.getCurrentPositionAsync({});
-      setLocation(currentLocation);      // 初回の位置情報をFirestoreに保存
-      const savedLocation = await saveLocationToFirestore(currentUserId);
-      if (savedLocation) {
-        // setLocationHistory([savedLocation]);
-        console.log("初回位置情報を保存しました");
-      }
+        if (status !== "granted") {
+          Alert.alert("エラー", "位置情報の許可が必要です");
+          return;
+        }
 
-      // 1分おきの位置情報取得を開始
-      startLocationTracking();
+        console.log("現在地を取得中...");
+        let currentLocation = await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.High,
+        });
+        console.log("位置情報取得成功:", currentLocation.coords);
+        setLocation(currentLocation);
+
+        // 初回の位置情報をFirestoreに保存
+        console.log("Firestoreに位置情報を保存中...");
+        const savedLocation = await saveLocationToFirestore(userId);
+        if (savedLocation) {
+          // setLocationHistory([savedLocation]);
+          console.log("初回位置情報を保存しました");
+        } else {
+          console.error("初回位置情報の保存に失敗しました");
+        }
+
+        // 1分おきの位置情報取得を開始
+        startLocationTracking();
+      } catch (error) {
+        console.error("位置情報取得処理でエラーが発生しました:", error);
+        Alert.alert(
+          "エラー",
+          "位置情報の取得に失敗しました: " +
+            (error instanceof Error ? error.message : String(error))
+        );
+      }
     })();
 
     // コンポーネントがアンマウントされるときにインターバルをクリア
@@ -118,11 +150,12 @@ export default function HomeScreen() {
         clearInterval(locationIntervalRef.current);
       }
     };
-  }, [currentUserId]);
-
-  // テスト用の投稿を追加
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // 初回のみ実行したいため
+  // テスト用の投稿を追加（最初の位置情報取得時のみ）
   useEffect(() => {
-    if (location) {
+    if (location && posts.length === 0) {
+      // postsが空の場合のみ実行
       const testPost: Post = {
         id: "test-1",
         content: "これはテスト投稿です。",
@@ -138,7 +171,7 @@ export default function HomeScreen() {
       };
       setPosts([testPost]);
     }
-  }, [location]);
+  }, [location, posts.length]);
 
   // キーボードイベントリスナー
   useEffect(() => {
@@ -419,21 +452,24 @@ export default function HomeScreen() {
     Alert.alert("リアクションを選択", "", buttons, { cancelable: true });
   };
   return (
-    <SafeAreaView style={styles.container}>      <View style={styles.header}>
+    <SafeAreaView style={styles.container}>
+      <View style={styles.header}>
         <Text style={styles.headerTitle}>地域共生アプリ</Text>
-        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-          <View style={{
-            width: 8,
-            height: 8,
-            borderRadius: 4,
-            backgroundColor: isLocationTracking ? '#4CAF50' : '#FFC107',
-            marginRight: 8
-          }} />
-          <Text style={{ fontSize: 12, color: '#666' }}>
-            {isLocationTracking ? '位置追跡中' : '待機中'}
+        <View style={{ flexDirection: "row", alignItems: "center" }}>
+          <View
+            style={{
+              width: 8,
+              height: 8,
+              borderRadius: 4,
+              backgroundColor: isLocationTracking ? "#4CAF50" : "#FFC107",
+              marginRight: 8,
+            }}
+          />
+          <Text style={{ fontSize: 12, color: "#666" }}>
+            {isLocationTracking ? "位置追跡中" : "待機中"}
           </Text>
         </View>
-      </View>{" "}
+      </View>
       {location ? (
         <MapView
           ref={mapRef}
@@ -470,7 +506,7 @@ export default function HomeScreen() {
         </MapView>
       ) : (
         <View style={styles.loadingContainer}>
-          <Text style={styles.loadingText}>位置情報を取得中...</Text>{" "}
+          <Text style={styles.loadingText}>位置情報を取得中...</Text>
         </View>
       )}
       {/* メッセージリストエリア */}
@@ -520,9 +556,10 @@ export default function HomeScreen() {
                       <Text style={styles.userName}>{post.author}</Text>
                       <Text style={styles.messageText}>{post.content}</Text>
                       <Text style={styles.messageTime}>
+                        {" "}
                         {post.timestamp.toLocaleString("ja-JP")}
                       </Text>
-                    </View>{" "}
+                    </View>
                     {/* アイコン群 */}
                     <View style={styles.messageIcons}>
                       <TouchableOpacity
@@ -541,9 +578,10 @@ export default function HomeScreen() {
                         style={styles.iconButton}
                         onPress={() => showReactionPicker(post.id)}
                       >
+                        {" "}
                         <Ionicons name="heart-outline" size={16} color="#666" />
                       </TouchableOpacity>
-                    </View>{" "}
+                    </View>
                   </View>
                   {/* リアクション表示 */}
                   {post.reactionCounts &&
@@ -587,9 +625,9 @@ export default function HomeScreen() {
                         {expandedReplies.has(post.id)
                           ? "返信を隠す"
                           : `返信を表示 (${post.replies.length}件)`}
-                      </Text>
+                      </Text>{" "}
                     </TouchableOpacity>
-                  )}{" "}
+                  )}
                   {/* リプライリスト */}
                   {expandedReplies.has(post.id) && post.replies && (
                     <View style={styles.repliesContainer}>
@@ -726,8 +764,8 @@ export default function HomeScreen() {
         style={styles.floatingButton}
         onPress={() => setModalVisible(true)}
       >
-        <Ionicons name="add" size={28} color="white" />
-      </TouchableOpacity>{" "}
+        <Ionicons name="add" size={28} color="white" />{" "}
+      </TouchableOpacity>
       <Modal
         animationType="slide"
         transparent={true}
@@ -747,8 +785,8 @@ export default function HomeScreen() {
                 onPress={handleCancelPost}
               >
                 <Ionicons name="close" size={24} color="#666" />
-              </TouchableOpacity>
-            </View>{" "}
+              </TouchableOpacity>{" "}
+            </View>
             <ScrollView
               style={styles.modalBody}
               keyboardShouldPersistTaps="handled"
@@ -795,10 +833,10 @@ export default function HomeScreen() {
                 style={styles.submitButton}
                 onPress={handleCreatePost}
               >
-                <Text style={styles.submitButtonText}>投稿する</Text>
+                <Text style={styles.submitButtonText}>投稿する</Text>{" "}
               </TouchableOpacity>
             </View>
-          </View>{" "}
+          </View>
         </KeyboardAvoidingView>
       </Modal>
     </SafeAreaView>

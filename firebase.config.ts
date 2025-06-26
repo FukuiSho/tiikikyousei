@@ -1,6 +1,5 @@
-import { initializeApp } from 'firebase/app';
-import { getFirestore } from 'firebase/firestore';
-import { getAuth } from 'firebase/auth';
+import { FirebaseApp, initializeApp } from "firebase/app";
+import { Firestore, getFirestore } from "firebase/firestore";
 
 // Firebase設定
 const firebaseConfig = {
@@ -9,16 +8,24 @@ const firebaseConfig = {
   projectId: "kyouseidb-6e400",
   storageBucket: "kyouseidb-6e400.firebasestorage.app",
   messagingSenderId: "303304465881",
-  appId: "1:303304465881:web:your-app-id-here" // 実際のアプリIDに置き換えてください
 };
 
 // Firebase初期化
-const app = initializeApp(firebaseConfig);
+let app: FirebaseApp;
+let db: Firestore;
 
-// Firestore データベース
-export const db = getFirestore(app);
+try {
+  app = initializeApp(firebaseConfig);
+  console.log("Firebase App初期化成功");
+  // Firestore データベース
+  db = getFirestore(app);
+  console.log("Firestore初期化成功");
+} catch (error) {
+  console.error("Firebase初期化エラー:", error);
+  throw error;
+}
 
-// Firebase Authentication
-export const auth = getAuth(app);
-
+// Authは使用しないため、undefinedをエクスポート
+export { db };
+export const auth = undefined;
 export default app;
