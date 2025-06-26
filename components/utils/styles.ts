@@ -153,15 +153,15 @@ export const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    zIndex: 1000,
+    zIndex: 1400, // messageListContainerより少し低く設定
   },
   messageListContainer: {
     position: "absolute",
     bottom: 0,
     left: 0,
     right: 0,
-    height: height * 0.65, // 下部をしっかり伸ばすために65%に増加
-    minHeight: 400, // 最小高さを設定
+    height: height * 0.7, // 70%に変更して十分な高さを確保
+    maxHeight: height * 0.8, // 最大高さも設定
     backgroundColor: "white",
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
@@ -173,8 +173,9 @@ export const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 3.84,
     elevation: 5,
-    zIndex: 1001,
-    paddingBottom: 0, // 下部のパディングを削除してしっかり伸ばす
+    zIndex: 1500, // オーバーレイより高いzIndexに設定
+    paddingBottom: 0,
+    flexDirection: "column", // フレックス方向を明示
   },
   handleBar: {
     width: 40,
@@ -229,9 +230,15 @@ export const styles = StyleSheet.create({
   messageList: {
     flex: 1,
     paddingHorizontal: 16,
+    paddingTop: 10,
   },
   messageItemContainer: {
-    marginBottom: 8,
+    marginBottom: 12,
+    backgroundColor: "#fff",
+    borderRadius: 8,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: "#f0f0f0",
   },
   messageItem: {
     flexDirection: "row",

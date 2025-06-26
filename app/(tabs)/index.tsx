@@ -23,6 +23,12 @@ import MapView, { Marker } from "react-native-maps";
 import { styles } from "../../components/utils/styles";
 import { Post, Reply } from "../../components/utils/types";
 import { saveLocationToFirestore } from "../../services/locationService";
+import {
+  getNearbyPosts,
+  savePostToFirestore,
+  updatePostReaction,
+} from "../../services/postService";
+import { getPersistentUserId } from "../../services/userService";
 
 // 使うリアクションの種類をここで定義します
 const reactionImages: { [key: string]: any } = {
@@ -32,6 +38,15 @@ const reactionImages: { [key: string]: any } = {
   "4": require("../../assets/images/face4.png"),
   "5": require("../../assets/images/face5.png"),
   "6": require("../../assets/images/face6.png"),
+};
+
+// リアクション画像の安全な取得関数
+const getReactionImage = (emoji: string) => {
+  if (reactionImages[emoji]) {
+    return reactionImages[emoji];
+  }
+  // フォールバック画像（最初の画像を使用）
+  return reactionImages["1"];
 };
 
 const { height } = Dimensions.get("window");
@@ -49,7 +64,6 @@ export default function HomeScreen() {
   const [posts, setPosts] = useState<Post[]>([]);
   const [newPost, setNewPost] = useState({
     content: "",
-    author: "",
   });
   const [expandedReplies, setExpandedReplies] = useState<Set<string>>(
     new Set()
@@ -57,10 +71,15 @@ export default function HomeScreen() {
   const [replyMode, setReplyMode] = useState<string | null>(null);
   const [newReply, setNewReply] = useState({
     content: "",
-    author: "",
   });
   const [keyboardHeight, setKeyboardHeight] = useState(0);
-  const [currentUserId] = useState(() => "user-" + Date.now()); // 簡易的なユーザーID（初期化時のみ生成）
+  const [currentUserId, setCurrentUserId] = useState<string>("");
+  const [reactionPickerVisible, setReactionPickerVisible] = useState(false);
+  const [reactionPickerTarget, setReactionPickerTarget] = useState<{
+    postId: string;
+    isReply: boolean;
+    replyId?: string;
+  } | null>(null);
   // const [locationHistory, setLocationHistory] = useState<LocationData[]>([]);
   const [isLocationTracking, setIsLocationTracking] = useState(false);
 
@@ -72,39 +91,136 @@ export default function HomeScreen() {
     null
   );
   useEffect(() => {
-    // 現在のユーザーIDを取得（初回レンダリング時の値を使用）
-    const userId = currentUserId; // 1分おきに位置情報を取得してFirestoreに保存する関数
-    const startLocationTracking = () => {
-      setIsLocationTracking(true);
-      console.log("位置情報の定期取得を開始しました（1分間隔）");
+    // 永続的なユーザーIDを取得
+    const initializeUserId = async () => {
+      const userId = await getPersistentUserId();
+      setCurrentUserId(userId);
+      console.log("現在のユーザーID:", userId);
 
-      locationIntervalRef.current = setInterval(async () => {
-        try {
-          console.log("定期取得：位置情報を取得中...");
-          const savedLocation = await saveLocationToFirestore(userId);
-
-          if (savedLocation) {
-            // 現在地を更新
-            console.log("定期取得：現在地を再取得中...");
-            const currentLocation = await Location.getCurrentPositionAsync({
-              accuracy: Location.Accuracy.High,
-            });
-            setLocation(currentLocation);
-            // 位置情報履歴を更新
-            // setLocationHistory(prev => [savedLocation, ...prev.slice(0, 49)]); // 最新50件を保持
-
-            console.log(
-              `定期取得：位置情報を保存しました: ${savedLocation.latitude}, ${savedLocation.longitude}`
-            );
-          } else {
-            console.error("定期取得：位置情報の保存に失敗しました");
-          }
-        } catch (error) {
-          console.error("位置情報の定期取得でエラーが発生しました:", error);
-        }
-      }, 5000); // 60秒（1分）間隔
+      // デフォルトの投稿内容を空に設定
+      setNewPost({ content: "" });
+      setNewReply({ content: "" });
     };
-    (async () => {
+
+    initializeUserId();
+
+    // 位置情報取得と保存の処理
+    const initializeLocationTracking = async () => {
+      // 1分おきに位置情報を取得してFirestoreに保存する関数
+      const startLocationTracking = () => {
+        setIsLocationTracking(true);
+        console.log("位置情報の定期取得を開始しました（1分間隔）");
+
+        locationIntervalRef.current = setInterval(async () => {
+          try {
+            console.log("定期取得：位置情報を取得中...");
+            const savedLocation = await saveLocationToFirestore(currentUserId);
+
+            if (savedLocation) {
+              // 現在地を更新
+              console.log("定期取得：現在地を再取得中...");
+              const currentLocation = await Location.getCurrentPositionAsync({
+                accuracy: Location.Accuracy.High,
+              });
+              setLocation(currentLocation);
+
+              // 周辺の投稿を取得して表示
+              console.log("周辺投稿を取得中...");
+              const nearbyPosts = await getNearbyPosts(
+                currentLocation.coords.latitude,
+                currentLocation.coords.longitude,
+                1.0 // 1km圏内
+              );
+
+              if (nearbyPosts.length > 0) {
+                console.log(`周辺投稿を${nearbyPosts.length}件取得しました`);
+                // Firestoreから取得した投稿をローカルの投稿リストと統合
+                const convertedPosts = nearbyPosts.map((firestorePost) => {
+                  // Firestoreのリアクション情報を変換
+                  const reactions: { [userID: string]: string } = {};
+                  const reactionCounts: { [emoji: string]: number } = {};
+
+                  if (
+                    firestorePost.reactions &&
+                    typeof firestorePost.reactions === "object"
+                  ) {
+                    Object.entries(firestorePost.reactions).forEach(
+                      ([emoji, data]: [string, any]) => {
+                        if (
+                          data &&
+                          data.userIds &&
+                          Array.isArray(data.userIds)
+                        ) {
+                          reactionCounts[emoji] =
+                            data.count || data.userIds.length;
+                          // 各ユーザーの反応を記録
+                          data.userIds.forEach((userId: string) => {
+                            reactions[userId] = emoji;
+                          });
+                        }
+                      }
+                    );
+                  }
+
+                  return {
+                    id: firestorePost.id,
+                    content: firestorePost.text,
+                    author: `User-${firestorePost.userID.slice(-6)}`, // ユーザーIDベースの表示名
+                    location: {
+                      latitude: firestorePost.coordinates.latitude,
+                      longitude: firestorePost.coordinates.longitude,
+                    },
+                    timestamp: firestorePost.timestamp,
+                    parentPostID: firestorePost.parentPostID, // 親投稿IDを含める
+                    reactions: reactions,
+                    reactionCounts: reactionCounts,
+                    replies: [], // 返信は別途取得する場合
+                  };
+                });
+
+                // 既存の投稿を更新または新しい投稿を追加
+                setPosts((prevPosts) => {
+                  const updatedPosts = [...prevPosts];
+                  let hasNewPosts = false;
+
+                  convertedPosts.forEach((newPost) => {
+                    const existingPostIndex = updatedPosts.findIndex(
+                      (p) => p.id === newPost.id
+                    );
+                    if (existingPostIndex >= 0) {
+                      // 既存の投稿を更新（リアクション情報など）
+                      updatedPosts[existingPostIndex] = {
+                        ...updatedPosts[existingPostIndex],
+                        reactions: newPost.reactions,
+                        reactionCounts: newPost.reactionCounts,
+                      };
+                    } else {
+                      // 新しい投稿を追加
+                      updatedPosts.unshift(newPost);
+                      hasNewPosts = true;
+                    }
+                  });
+
+                  if (hasNewPosts) {
+                    console.log(`新しい投稿が追加されました`);
+                  }
+
+                  return updatedPosts;
+                });
+              } else {
+                console.log("周辺に新しい投稿はありません");
+              }
+
+              console.log("定期取得：位置情報を保存しました");
+            } else {
+              console.error("定期取得：位置情報の保存に失敗しました");
+            }
+          } catch (error) {
+            console.error("位置情報の定期取得でエラーが発生しました:", error);
+          }
+        }, 5000); // 60秒（1分）間隔
+      };
+
       try {
         console.log("位置情報の許可を要求中...");
         let { status } = await Location.requestForegroundPermissionsAsync();
@@ -124,12 +240,66 @@ export default function HomeScreen() {
 
         // 初回の位置情報をFirestoreに保存
         console.log("Firestoreに位置情報を保存中...");
-        const savedLocation = await saveLocationToFirestore(userId);
+        const savedLocation = await saveLocationToFirestore(currentUserId);
         if (savedLocation) {
-          // setLocationHistory([savedLocation]);
           console.log("初回位置情報を保存しました");
         } else {
           console.error("初回位置情報の保存に失敗しました");
+        }
+
+        // 初回の周辺投稿取得
+        console.log("初回：周辺投稿を取得中...");
+        const initialNearbyPosts = await getNearbyPosts(
+          currentLocation.coords.latitude,
+          currentLocation.coords.longitude,
+          1.0 // 1km圏内
+        );
+
+        if (initialNearbyPosts.length > 0) {
+          console.log(
+            `初回：周辺投稿を${initialNearbyPosts.length}件取得しました`
+          );
+          // Firestoreから取得した投稿をローカルの投稿リストに設定
+          const convertedPosts = initialNearbyPosts.map((firestorePost) => {
+            // Firestoreのリアクション情報を変換
+            const reactions: { [userID: string]: string } = {};
+            const reactionCounts: { [emoji: string]: number } = {};
+
+            if (
+              firestorePost.reactions &&
+              typeof firestorePost.reactions === "object"
+            ) {
+              Object.entries(firestorePost.reactions).forEach(
+                ([emoji, data]: [string, any]) => {
+                  if (data && data.userIds && Array.isArray(data.userIds)) {
+                    reactionCounts[emoji] = data.count || data.userIds.length;
+                    // 各ユーザーの反応を記録
+                    data.userIds.forEach((userId: string) => {
+                      reactions[userId] = emoji;
+                    });
+                  }
+                }
+              );
+            }
+
+            return {
+              id: firestorePost.id,
+              content: firestorePost.text,
+              author: `User-${firestorePost.userID.slice(-6)}`, // ユーザーIDベースの表示名
+              location: {
+                latitude: firestorePost.coordinates.latitude,
+                longitude: firestorePost.coordinates.longitude,
+              },
+              timestamp: firestorePost.timestamp,
+              parentPostID: firestorePost.parentPostID, // 親投稿IDを含める
+              reactions: reactions,
+              reactionCounts: reactionCounts,
+              replies: [], // 返信は別途取得する場合
+            };
+          });
+          setPosts(convertedPosts);
+        } else {
+          console.log("初回：周辺に投稿はありません");
         }
 
         // 1分おきの位置情報取得を開始
@@ -142,7 +312,12 @@ export default function HomeScreen() {
             (error instanceof Error ? error.message : String(error))
         );
       }
-    })();
+    };
+
+    // ユーザーIDが設定された後に位置情報処理を開始
+    if (currentUserId) {
+      initializeLocationTracking();
+    }
 
     // コンポーネントがアンマウントされるときにインターバルをクリア
     return () => {
@@ -150,8 +325,7 @@ export default function HomeScreen() {
         clearInterval(locationIntervalRef.current);
       }
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // 初回のみ実行したいため
+  }, [currentUserId]); // currentUserIdが設定されたときに実行
   // テスト用の投稿を追加（最初の位置情報取得時のみ）
   useEffect(() => {
     if (location && posts.length === 0) {
@@ -189,9 +363,9 @@ export default function HomeScreen() {
       keyboardDidHideListener?.remove();
     };
   }, []);
-  const handleCreatePost = () => {
-    if (!newPost.content.trim() || !newPost.author.trim()) {
-      Alert.alert("エラー", "全ての項目を入力してください");
+  const handleCreatePost = async () => {
+    if (!newPost.content.trim()) {
+      Alert.alert("エラー", "投稿内容を入力してください");
       return;
     }
 
@@ -200,26 +374,49 @@ export default function HomeScreen() {
       return;
     }
 
-    const post: Post = {
-      id: Date.now().toString(),
-      content: newPost.content,
-      author: newPost.author,
-      location: {
+    try {
+      console.log("投稿作成開始 - UserID:", currentUserId);
+
+      // Firestoreに投稿を保存（ID, coordinates, geohash, text, photoURL, timestamp, userID, parentPostID, reactions を含む）
+      const postId = await savePostToFirestore({
+        text: newPost.content,
         latitude: location.coords.latitude,
         longitude: location.coords.longitude,
-      },
-      timestamp: new Date(),
-      reactions: {},
-      reactionCounts: {},
-    };
+        photoURL: undefined, // 後で画像アップロード機能を追加
+      });
 
-    setPosts([...posts, post]);
-    setNewPost({ content: "", author: "" });
-    setModalVisible(false);
-    Alert.alert("成功", "投稿が作成されました！");
+      if (postId) {
+        console.log("投稿保存成功 - PostID:", postId);
+
+        // ローカルの投稿リストにも追加（UIの即座更新のため）
+        const post: Post = {
+          id: postId,
+          content: newPost.content,
+          author: `User-${currentUserId.slice(-6)}`, // ユーザーIDベースの作成者名
+          location: {
+            latitude: location.coords.latitude,
+            longitude: location.coords.longitude,
+          },
+          timestamp: new Date(),
+          parentPostID: undefined, // 新規投稿は親投稿なのでundefined
+          reactions: {},
+          reactionCounts: {},
+        };
+
+        setPosts([post, ...posts]); // 新しい投稿を先頭に追加
+        setNewPost({ content: "" }); // 内容をクリア
+        setModalVisible(false);
+        Alert.alert("成功", "投稿が作成されました！");
+      } else {
+        Alert.alert("エラー", "投稿の保存に失敗しました");
+      }
+    } catch (error) {
+      console.error("投稿作成エラー:", error);
+      Alert.alert("エラー", "投稿の作成に失敗しました");
+    }
   };
   const handleCancelPost = () => {
-    setNewPost({ content: "", author: "" });
+    setNewPost({ content: "" });
     setModalVisible(false);
   };
   const handleMarkerPress = (post: Post) => {
@@ -274,13 +471,35 @@ export default function HomeScreen() {
   const getPostsForLocation = () => {
     if (!selectedLocation) return [];
     // 選択された場所の近くの投稿を取得（半径1km以内など）
-    return posts.filter((post) => {
+    const nearbyPosts = posts.filter((post) => {
       const distance = Math.sqrt(
         Math.pow(post.location.latitude - selectedLocation.latitude, 2) +
           Math.pow(post.location.longitude - selectedLocation.longitude, 2)
       );
       return distance < 0.01; // 約1km
     });
+
+    // 親投稿のみを返す（parentPostIDがないもの）
+    return nearbyPosts.filter((post) => !post.parentPostID);
+  };
+
+  /**
+   * 指定された親投稿IDのリプライを取得
+   */
+  const getRepliesForPost = (parentPostId: string) => {
+    if (!selectedLocation) return [];
+
+    // 選択された場所の近くの投稿から、指定された親投稿のリプライのみを取得
+    const nearbyPosts = posts.filter((post) => {
+      const distance = Math.sqrt(
+        Math.pow(post.location.latitude - selectedLocation.latitude, 2) +
+          Math.pow(post.location.longitude - selectedLocation.longitude, 2)
+      );
+      return distance < 0.01; // 約1km
+    });
+
+    // parentPostIDが一致するリプライのみを返す
+    return nearbyPosts.filter((post) => post.parentPostID === parentPostId);
   };
 
   const toggleReplies = (postId: string) => {
@@ -292,102 +511,96 @@ export default function HomeScreen() {
     }
     setExpandedReplies(newExpanded);
   };
-  const handleReplySubmit = (postId: string) => {
-    if (!newReply.content.trim() || !newReply.author.trim()) {
-      Alert.alert("エラー", "内容と投稿者名を入力してください");
+  const handleReplySubmit = async (postId: string) => {
+    if (!newReply.content.trim()) {
+      Alert.alert("エラー", "返信内容を入力してください");
       return;
     }
 
-    const reply: Reply = {
-      id: Date.now().toString(),
-      content: newReply.content,
-      author: newReply.author,
-      timestamp: new Date(),
-      reactions: {},
-      reactionCounts: {},
-    };
+    if (!location) {
+      Alert.alert("エラー", "位置情報が取得できません");
+      return;
+    }
 
-    setPosts(
-      posts.map((post) => {
-        if (post.id === postId) {
-          return {
-            ...post,
-            replies: [...(post.replies || []), reply],
-          };
-        }
-        return post;
-      })
-    );
+    try {
+      console.log(
+        "返信作成開始 - UserID:",
+        currentUserId,
+        "ParentPostID:",
+        postId
+      );
 
-    // 入力フィールドをクリアしてキーボードを閉じる
-    setNewReply({ content: "", author: "" });
-    setReplyMode(null);
-    Keyboard.dismiss();
-    Alert.alert("成功", "返信が投稿されました！");
+      // Firestoreに返信を保存（ID, coordinates, geohash, text, photoURL, timestamp, userID, parentPostID, reactions を含む）
+      const replyId = await savePostToFirestore({
+        text: newReply.content,
+        latitude: location.coords.latitude,
+        longitude: location.coords.longitude,
+        parentPostID: postId, // 親投稿IDを指定
+        photoURL: undefined,
+      });
+
+      if (replyId) {
+        console.log("返信保存成功 - ReplyID:", replyId);
+
+        // ローカルの投稿リストにも反映（UIの即座更新のため）
+        const reply: Reply = {
+          id: replyId,
+          content: newReply.content,
+          author: `User-${currentUserId.slice(-6)}`, // ユーザーIDベースの作成者名
+          timestamp: new Date(),
+          reactions: {},
+          reactionCounts: {},
+        };
+
+        setPosts(
+          posts.map((post) => {
+            if (post.id === postId) {
+              return {
+                ...post,
+                replies: [...(post.replies || []), reply],
+              };
+            }
+            return post;
+          })
+        );
+
+        // 入力フィールドをクリアしてキーボードを閉じる
+        setNewReply({ content: "" }); // 内容をクリア
+        setReplyMode(null);
+        Keyboard.dismiss();
+        Alert.alert("成功", "返信が投稿されました！");
+      } else {
+        Alert.alert("エラー", "返信の保存に失敗しました");
+      }
+    } catch (error) {
+      console.error("返信作成エラー:", error);
+      Alert.alert("エラー", "返信の作成に失敗しました");
+    }
   };
 
-  const handleReaction = (
+  const handleReaction = async (
     postId: string,
     pickerLabel: string,
     isReply: boolean = false,
     replyId?: string
   ) => {
-    setPosts(
-      posts.map((post) => {
-        if (post.id === postId) {
-          if (isReply && replyId) {
-            // Reply のリアクション
-            const updatedReplies = (post.replies || []).map((reply) => {
-              if (reply.id === replyId) {
-                const reactions = { ...(reply.reactions || {}) };
-                const reactionCounts = { ...(reply.reactionCounts || {}) };
+    try {
+      console.log(
+        `リアクション処理開始: PostID=${postId}, Emoji=${pickerLabel}`
+      );
 
-                // 既存のリアクションを確認
-                const currentReaction = reactions[currentUserId];
+      // Firestoreに保存
+      const success = await updatePostReaction(postId, pickerLabel);
 
-                if (currentReaction === pickerLabel) {
-                  // 同じ絵文字の場合は削除
-                  delete reactions[currentUserId];
-                  reactionCounts[pickerLabel] = Math.max(
-                    0,
-                    (reactionCounts[pickerLabel] || 0) - 1
-                  );
-                  if (reactionCounts[pickerLabel] === 0) {
-                    delete reactionCounts[pickerLabel];
-                  }
-                } else {
-                  // 異なる絵文字または新規の場合
-                  if (currentReaction) {
-                    // 既存のリアクションを減らす
-                    reactionCounts[currentReaction] = Math.max(
-                      0,
-                      (reactionCounts[currentReaction] || 0) - 1
-                    );
-                    if (reactionCounts[currentReaction] === 0) {
-                      delete reactionCounts[currentReaction];
-                    }
-                  }
-                  // 新しいリアクションを追加
-                  reactions[currentUserId] = pickerLabel;
-                  reactionCounts[pickerLabel] =
-                    (reactionCounts[pickerLabel] || 0) + 1;
-                }
+      if (!success) {
+        Alert.alert("エラー", "リアクションの更新に失敗しました");
+        return;
+      }
 
-                return {
-                  ...reply,
-                  reactions,
-                  reactionCounts,
-                };
-              }
-              return reply;
-            });
-
-            return {
-              ...post,
-              replies: updatedReplies,
-            };
-          } else {
-            // Post のリアクション
+      // ローカルの投稿リストも更新（UIの即座更新のため）
+      setPosts(
+        posts.map((post) => {
+          if (post.id === postId) {
             const reactions = { ...(post.reactions || {}) };
             const reactionCounts = { ...(post.reactionCounts || {}) };
 
@@ -428,28 +641,101 @@ export default function HomeScreen() {
               reactionCounts,
             };
           }
+          return post;
+        })
+      );
+
+      // リアクション更新後、最新の投稿データを取得して同期
+      if (location) {
+        try {
+          console.log("リアクション後の投稿データ同期中...");
+          const updatedNearbyPosts = await getNearbyPosts(
+            location.coords.latitude,
+            location.coords.longitude,
+            1.0
+          );
+
+          // Firestoreから取得した最新データでローカル状態を更新
+          if (updatedNearbyPosts.length > 0) {
+            const convertedPosts = updatedNearbyPosts.map((firestorePost) => {
+              // Firestoreのリアクション情報を変換
+              const reactions: { [userID: string]: string } = {};
+              const reactionCounts: { [emoji: string]: number } = {};
+
+              if (
+                firestorePost.reactions &&
+                typeof firestorePost.reactions === "object"
+              ) {
+                Object.entries(firestorePost.reactions).forEach(
+                  ([emoji, data]: [string, any]) => {
+                    if (data && data.userIds && Array.isArray(data.userIds)) {
+                      reactionCounts[emoji] = data.count || data.userIds.length;
+                      // 各ユーザーの反応を記録
+                      data.userIds.forEach((userId: string) => {
+                        reactions[userId] = emoji;
+                      });
+                    }
+                  }
+                );
+              }
+
+              return {
+                id: firestorePost.id,
+                content: firestorePost.text,
+                author: `User-${firestorePost.userID.slice(-6)}`,
+                location: {
+                  latitude: firestorePost.coordinates.latitude,
+                  longitude: firestorePost.coordinates.longitude,
+                },
+                timestamp: firestorePost.timestamp,
+                parentPostID: firestorePost.parentPostID,
+                reactions: reactions,
+                reactionCounts: reactionCounts,
+                replies: [],
+              };
+            });
+
+            // 既存の投稿を更新（リアクション情報のみ）
+            setPosts((prevPosts) => {
+              const updatedPosts = [...prevPosts];
+
+              convertedPosts.forEach((newPost) => {
+                const existingPostIndex = updatedPosts.findIndex(
+                  (p) => p.id === newPost.id
+                );
+                if (existingPostIndex >= 0) {
+                  updatedPosts[existingPostIndex] = {
+                    ...updatedPosts[existingPostIndex],
+                    reactions: newPost.reactions,
+                    reactionCounts: newPost.reactionCounts,
+                  };
+                }
+              });
+
+              return updatedPosts;
+            });
+            console.log("リアクション後の同期完了");
+          }
+        } catch (syncError) {
+          console.error("リアクション後の同期エラー:", syncError);
+          // 同期に失敗してもローカル更新は継続
         }
-        return post;
-      })
-    );
+      }
+
+      console.log("リアクション処理完了");
+    } catch (error) {
+      console.error("リアクション処理エラー:", error);
+      Alert.alert("エラー", "リアクションの処理に失敗しました");
+    }
   };
+
   const showReactionPicker = (
     postId: string,
     isReply: boolean = false,
     replyId?: string
   ) => {
-    const reactions = ["1", "2", "3", "4", "5", "6"];
-    const buttons = reactions.map((pickerLabel) => ({
-      text: pickerLabel,
-      onPress: () => handleReaction(postId, pickerLabel, isReply, replyId),
-    }));
-
-    buttons.push({
-      text: "キャンセル",
-      onPress: () => {},
-    });
-
-    Alert.alert("リアクションを選択", "", buttons, { cancelable: true });
+    setReactionPickerTarget({ postId, isReply, replyId });
+    setReactionPickerVisible(true);
   };
   return (
     <SafeAreaView style={styles.container}>
@@ -471,39 +757,68 @@ export default function HomeScreen() {
         </View>
       </View>
       {location ? (
-        <MapView
-          ref={mapRef}
-          style={styles.map}
-          initialRegion={{
-            latitude: location.coords.latitude,
-            longitude: location.coords.longitude,
-            latitudeDelta: 0.01, // 初期表示は少し広めに設定（約1km範囲）
-            longitudeDelta: 0.01, // 初期表示は少し広めに設定（約1km範囲）
-          }}
-        >
-          <Marker
-            coordinate={{
+        <>
+          <MapView
+            ref={mapRef}
+            style={styles.map}
+            initialRegion={{
               latitude: location.coords.latitude,
               longitude: location.coords.longitude,
+              latitudeDelta: 0.01, // 初期表示は少し広めに設定（約1km範囲）
+              longitudeDelta: 0.01, // 初期表示は少し広めに設定（約1km範囲）
             }}
-            title="現在地"
-            description="あなたの現在位置"
-            pinColor="blue"
-          />
-          {posts.map((post) => (
-            <Marker
-              key={post.id}
-              coordinate={post.location}
-              title={
-                post.content.length > 20
-                  ? post.content.substring(0, 20) + "..."
-                  : post.content
+            // コメントリスト表示時はマップ操作を無効化
+            scrollEnabled={!messageListVisible}
+            zoomEnabled={!messageListVisible}
+            rotateEnabled={!messageListVisible}
+            pitchEnabled={!messageListVisible}
+            moveOnMarkerPress={!messageListVisible}
+            onTouchStart={() => {
+              // コメントリスト表示時はマップタッチを無効化
+              if (messageListVisible) {
+                return false;
               }
-              description={`${post.content.substring(0, 50)}...`}
-              onPress={() => handleMarkerPress(post)}
+            }}
+          >
+            <Marker
+              coordinate={{
+                latitude: location.coords.latitude,
+                longitude: location.coords.longitude,
+              }}
+              title="現在地"
+              description="あなたの現在位置"
+              pinColor="blue"
             />
-          ))}
-        </MapView>
+            {posts.map((post) => (
+              <Marker
+                key={post.id}
+                coordinate={post.location}
+                title={
+                  post.content.length > 20
+                    ? post.content.substring(0, 20) + "..."
+                    : post.content
+                }
+                description={`${post.content.substring(0, 50)}...`}
+                onPress={() => handleMarkerPress(post)}
+              />
+            ))}
+          </MapView>
+          {/* コメントリスト表示時のマップ操作防止オーバーレイ */}
+          {messageListVisible && (
+            <View
+              style={{
+                position: "absolute",
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                backgroundColor: "transparent",
+                zIndex: 999,
+              }}
+              pointerEvents="none" // マップのタッチを無効化
+            />
+          )}
+        </>
       ) : (
         <View style={styles.loadingContainer}>
           <Text style={styles.loadingText}>位置情報を取得中...</Text>
@@ -541,11 +856,18 @@ export default function HomeScreen() {
             {/* コメントリスト */}
             <ScrollView
               style={styles.messageList}
+              contentContainerStyle={{ paddingBottom: 20 }}
               keyboardShouldPersistTaps="handled"
-              showsVerticalScrollIndicator={false}
+              showsVerticalScrollIndicator={true}
+              scrollEnabled={true}
+              nestedScrollEnabled={true}
+              bounces={true}
+              scrollEventThrottle={16}
+              removeClippedSubviews={false}
             >
               {getPostsForLocation().map((post) => (
                 <View key={post.id} style={styles.messageItemContainer}>
+                  {/* 親投稿 */}
                   <View style={styles.messageItem}>
                     {/* ユーザーアイコン */}
                     <View style={styles.userIcon}>
@@ -601,7 +923,7 @@ export default function HomeScreen() {
                               }
                             >
                               <Image
-                                source={reactionImages[pickerLabel]}
+                                source={getReactionImage(pickerLabel)}
                                 style={{
                                   width: 20,
                                   height: 20,
@@ -616,7 +938,7 @@ export default function HomeScreen() {
                       </View>
                     )}
                   {/* リプライ数表示 */}
-                  {post.replies && post.replies.length > 0 && (
+                  {getRepliesForPost(post.id).length > 0 && (
                     <TouchableOpacity
                       style={styles.replyToggle}
                       onPress={() => toggleReplies(post.id)}
@@ -624,35 +946,39 @@ export default function HomeScreen() {
                       <Text style={styles.replyToggleText}>
                         {expandedReplies.has(post.id)
                           ? "返信を隠す"
-                          : `返信を表示 (${post.replies.length}件)`}
-                      </Text>{" "}
+                          : `返信を表示 (${getRepliesForPost(post.id).length}件)`}
+                      </Text>
                     </TouchableOpacity>
                   )}
-                  {/* リプライリスト */}
-                  {expandedReplies.has(post.id) && post.replies && (
+                  {/* 実際のリプライ投稿リスト */}
+                  {expandedReplies.has(post.id) && (
                     <View style={styles.repliesContainer}>
-                      {post.replies.map((reply) => (
-                        <View key={reply.id}>
+                      {getRepliesForPost(post.id).map((replyPost) => (
+                        <View key={replyPost.id}>
                           <View style={styles.replyItem}>
                             <View style={styles.replyIcon}>
-                              <Ionicons name="person" size={16} color="#888" />
+                              <Ionicons
+                                name="return-down-forward"
+                                size={16}
+                                color="#888"
+                              />
                             </View>
                             <View style={styles.replyContent}>
                               <Text style={styles.replyUserName}>
-                                {reply.author}
+                                {replyPost.author}
                               </Text>
                               <Text style={styles.replyText}>
-                                {reply.content}
+                                {replyPost.content}
                               </Text>
                               <Text style={styles.replyTime}>
-                                {reply.timestamp.toLocaleString("ja-JP")}
+                                {replyPost.timestamp.toLocaleString("ja-JP")}
                               </Text>
                             </View>
                             <View style={styles.replyActions}>
                               <TouchableOpacity
                                 style={styles.replyActionButton}
                                 onPress={() =>
-                                  showReactionPicker(post.id, true, reply.id)
+                                  showReactionPicker(replyPost.id, false)
                                 }
                               >
                                 <Ionicons
@@ -664,36 +990,39 @@ export default function HomeScreen() {
                             </View>
                           </View>
 
-                          {/* リプライのリアクション表示 */}
-                          {reply.reactionCounts &&
-                            Object.keys(reply.reactionCounts).length > 0 && (
+                          {/* リプライ投稿のリアクション表示 */}
+                          {replyPost.reactionCounts &&
+                            Object.keys(replyPost.reactionCounts).length >
+                              0 && (
                               <View style={styles.replyReactionsDisplay}>
-                                {Object.entries(reply.reactionCounts).map(
+                                {Object.entries(replyPost.reactionCounts).map(
                                   ([pickerLabel, count]) => (
                                     <TouchableOpacity
                                       key={pickerLabel}
                                       style={[
                                         styles.replyReactionItem,
-                                        reply.reactions?.[currentUserId] ===
+                                        replyPost.reactions?.[currentUserId] ===
                                           pickerLabel &&
                                           styles.reactionItemActive,
                                       ]}
                                       onPress={() =>
                                         handleReaction(
-                                          post.id,
-                                          pickerLabel,
-                                          true,
-                                          reply.id
+                                          replyPost.id,
+                                          pickerLabel
                                         )
                                       }
                                     >
-                                      <Text
-                                        style={{ fontSize: 14, marginRight: 4 }}
-                                      >
-                                        {pickerLabel}
-                                      </Text>
+                                      <Image
+                                        source={getReactionImage(pickerLabel)}
+                                        style={{
+                                          width: 14,
+                                          height: 14,
+                                          marginRight: 2,
+                                        }}
+                                        resizeMode="contain"
+                                      />
                                       <Text style={styles.reactionCount}>
-                                        {count}
+                                        {String(count)}
                                       </Text>
                                     </TouchableOpacity>
                                   )
@@ -717,21 +1046,12 @@ export default function HomeScreen() {
                         multiline={true}
                         maxLength={200}
                       />
-                      <TextInput
-                        style={styles.replyAuthorInput}
-                        placeholder="あなたの名前"
-                        value={newReply.author}
-                        onChangeText={(text) =>
-                          setNewReply({ ...newReply, author: text })
-                        }
-                        maxLength={20}
-                      />
                       <View style={styles.replyFormButtons}>
                         <TouchableOpacity
                           style={styles.replyCancel}
                           onPress={() => {
                             setReplyMode(null);
-                            setNewReply({ content: "", author: "" });
+                            setNewReply({ content: "" });
                           }}
                         >
                           <Text style={styles.replyCancelText}>キャンセル</Text>
@@ -807,20 +1127,6 @@ export default function HomeScreen() {
                   textAlignVertical="top"
                 />
               </View>
-
-              <View style={styles.inputGroup}>
-                <Text style={styles.label}>投稿者名</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="あなたの名前を入力"
-                  value={newPost.author}
-                  onChangeText={(text) =>
-                    setNewPost({ ...newPost, author: text })
-                  }
-                  maxLength={20}
-                  returnKeyType="done"
-                />
-              </View>
             </ScrollView>
             <View style={styles.modalFooter}>
               <TouchableOpacity
@@ -838,6 +1144,86 @@ export default function HomeScreen() {
             </View>
           </View>
         </KeyboardAvoidingView>
+      </Modal>
+
+      {/* リアクション選択モーダル */}
+      <Modal
+        visible={reactionPickerVisible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setReactionPickerVisible(false)}
+      >
+        <TouchableOpacity
+          style={{
+            flex: 1,
+            backgroundColor: "rgba(0, 0, 0, 0.5)",
+            justifyContent: "center",
+            alignItems: "center",
+          }}
+          activeOpacity={1}
+          onPress={() => setReactionPickerVisible(false)}
+        >
+          <View
+            style={{
+              backgroundColor: "white",
+              borderRadius: 15,
+              padding: 20,
+              margin: 20,
+              maxWidth: 300,
+            }}
+          >
+            <Text
+              style={{
+                fontSize: 16,
+                fontWeight: "bold",
+                textAlign: "center",
+                marginBottom: 15,
+              }}
+            >
+              リアクションを選択
+            </Text>
+            <View
+              style={{
+                flexDirection: "row",
+                flexWrap: "wrap",
+                justifyContent: "center",
+                gap: 10,
+              }}
+            >
+              {["1", "2", "3", "4", "5", "6"].map((emoji) => (
+                <TouchableOpacity
+                  key={emoji}
+                  style={{
+                    padding: 10,
+                    borderRadius: 10,
+                    backgroundColor: "#f0f0f0",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    width: 60,
+                    height: 60,
+                  }}
+                  onPress={async () => {
+                    if (reactionPickerTarget) {
+                      await handleReaction(
+                        reactionPickerTarget.postId,
+                        emoji,
+                        reactionPickerTarget.isReply,
+                        reactionPickerTarget.replyId
+                      );
+                    }
+                    setReactionPickerVisible(false);
+                  }}
+                >
+                  <Image
+                    source={getReactionImage(emoji)}
+                    style={{ width: 40, height: 40 }}
+                    resizeMode="contain"
+                  />
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        </TouchableOpacity>
       </Modal>
     </SafeAreaView>
   );

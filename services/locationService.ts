@@ -87,8 +87,23 @@ export const saveLocationToFirestore = async (
         attemptCount++;
         console.log(`位置情報取得試行 ${attemptCount}/${maxAttempts}`);
 
+        // より緩い設定から試行
+        const accuracyOptions = [
+          Location.Accuracy.High,
+          Location.Accuracy.Balanced,
+          Location.Accuracy.Low,
+        ];
+
+        const accuracy =
+          accuracyOptions[
+            Math.min(attemptCount - 1, accuracyOptions.length - 1)
+          ];
+        console.log(
+          `精度設定: ${accuracy === Location.Accuracy.High ? "High" : accuracy === Location.Accuracy.Balanced ? "Balanced" : "Low"}`
+        );
+
         location = await Location.getCurrentPositionAsync({
-          accuracy: Location.Accuracy.High,
+          accuracy: accuracy,
         });
 
         console.log("位置情報取得成功:", {
@@ -102,12 +117,32 @@ export const saveLocationToFirestore = async (
         console.warn(`位置情報取得試行${attemptCount}失敗:`, error);
 
         if (attemptCount < maxAttempts) {
-          console.log("2秒後に再試行します...");
-          await new Promise((resolve) => setTimeout(resolve, 2000));
+          const waitTime = attemptCount * 2000; // 段階的に待機時間を延長
+          console.log(`${waitTime / 1000}秒後に再試行します...`);
+          await new Promise((resolve) => setTimeout(resolve, waitTime));
         } else {
           console.error(
             "位置情報取得に失敗しました（最大試行回数に達しました）"
           );
+
+          // 最後の手段として、キャッシュされた位置情報を取得を試行
+          try {
+            console.log("キャッシュされた位置情報の取得を試行中...");
+            location = await Location.getLastKnownPositionAsync({
+              maxAge: 60000, // 1分以内のキャッシュを許可
+              requiredAccuracy: 1000, // 1km以内の精度を許可
+            });
+            if (location) {
+              console.log("キャッシュされた位置情報を使用:", location.coords);
+              break;
+            }
+          } catch (cacheError) {
+            console.warn(
+              "キャッシュされた位置情報も取得できませんでした:",
+              cacheError
+            );
+          }
+
           return null;
         }
       }
@@ -559,68 +594,6 @@ const checkRecentEncounterInUser = async (
 };
 
 // 最近のすれ違い記録をチェック（重複防止）- 古いencountersコレクション用（削除予定）
-const checkRecentEncounter = async (
-  myUserId: string,
-  otherUserId: string,
-  withinMinutes: number
-): Promise<boolean> => {
-  try {
-    const cutoffTime = new Date(Date.now() - withinMinutes * 60 * 1000);
-    console.log(
-      `重複チェック開始: ${myUserId} vs ${otherUserId}, カットオフ時間: ${cutoffTime.toISOString()}`
-    );
-
-    const q = query(
-      collection(db, "encounters"),
-      orderBy("timestamp", "desc"),
-      limit(50) // 最近の50件をチェック
-    );
-
-    const querySnapshot = await getDocs(q);
-    console.log(`チェック対象のencounters件数: ${querySnapshot.size}`);
-
-    for (const doc of querySnapshot.docs) {
-      const data = doc.data();
-      const encounterTime = data.timestamp?.toDate() || new Date(0);
-
-      console.log(
-        `チェック中: ${data.myUserId} vs ${data.otherUserId}, 時刻: ${encounterTime.toISOString()}`
-      );
-
-      if (encounterTime < cutoffTime) {
-        console.log(
-          `時間外のため終了: ${encounterTime.toISOString()} < ${cutoffTime.toISOString()}`
-        );
-        break; // 時間外なので終了
-      }
-
-      if (data.myUserId === myUserId && data.otherUserId === otherUserId) {
-        console.log(
-          `重複発見: ${myUserId} と ${otherUserId} のすれ違いが既に記録済み`
-        );
-        return true; // 重複発見
-      }
-    }
-
-    console.log(`重複なし: ${myUserId} と ${otherUserId} の新規すれ違い`);
-    return false; // 重複なし
-  } catch (error) {
-    console.error("重複チェックエラー:", error);
-    return false; // エラーの場合は重複なしとして処理
-  }
-};
-
-// すれ違い情報をFirestoreに保存（古いencountersコレクション用 - 削除予定）
-const saveEncounterToFirestore = async (encounter: any): Promise<void> => {
-  try {
-    console.log("すれ違い情報を保存開始:", encounter);
-    const docRef = doc(db, "encounters", encounter.id);
-    await setDoc(docRef, encounter);
-    console.log("すれ違い情報を保存完了:", encounter.id);
-  } catch (error) {
-    console.error("すれ違い情報の保存エラー:", error);
-  }
-};
 
 // usersdataのサンプルデータ
 export const usersdata: Users[] = [
