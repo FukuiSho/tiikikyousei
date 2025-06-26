@@ -1,12 +1,7 @@
-import { Tabs } from 'expo-router';
-import React from 'react';
-import { Platform } from 'react-native';
+import { Tabs } from "expo-router";
+import React from "react";
 
-import { HapticTab } from '@/components/HapticTab';
-import { IconSymbol } from '@/components/ui/IconSymbol';
-import TabBarBackground from '@/components/ui/TabBarBackground';
-import { Colors } from '@/constants/Colors';
-import { useColorScheme } from '@/hooks/useColorScheme';
+import { useColorScheme } from "@/hooks/useColorScheme";
 
 export default function TabLayout() {
   const colorScheme = useColorScheme();
@@ -14,15 +9,17 @@ export default function TabLayout() {
   return (
     <Tabs
       screenOptions={{
-        tabBarStyle: { display: 'none' }, // タブバーを完全に非表示
+        // tabBarStyle: { display: "none" }, // タブバーを完全に非表示
         headerShown: false, // ヘッダーも非表示
-      }}>
+      }}
+    >
       <Tabs.Screen
         name="index"
         options={{
-          title: '',
+          title: "",
         }}
       />
+      <Tabs.Screen name="signup" options={{ title: "アカウント登録" }} />
     </Tabs>
   );
 }
