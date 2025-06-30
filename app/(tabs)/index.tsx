@@ -1,5 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import * as Location from "expo-location";
+import { useRouter } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
 import {
   Alert,
@@ -7,6 +8,7 @@ import {
   Dimensions,
   Platform,
   SafeAreaView,
+  StyleSheet,
   Text,
   TouchableOpacity,
   View,
@@ -415,6 +417,8 @@ export default function HomeScreen() {
     }).start();
   };
 
+  const router = useRouter();
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
@@ -460,6 +464,13 @@ export default function HomeScreen() {
         onSlideUp={handleSlideUp}
         onSlideToNormal={handleSlideToNormal}
       />
+      {/* 右下に固定された履歴ボタン */}
+      <TouchableOpacity
+        style={style.historyButton}
+        onPress={() => router.push("/history" as const)}
+      >
+        <Text style={style.historyButtonText}>履歴を見る</Text>
+      </TouchableOpacity>
       {/* フローティング投稿ボタン */}
       <TouchableOpacity
         style={styles.floatingButton}
@@ -481,3 +492,28 @@ export default function HomeScreen() {
     </SafeAreaView>
   );
 }
+
+const style = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: "#ffffff",
+    justifyContent: "flex-start",
+    alignItems: "center",
+    paddingTop: 80,
+  },
+  historyButton: {
+    position: "absolute",
+    bottom: 30, // 下からの位置
+    right: 20, // 右からの位置
+    backgroundColor: "#4682B4",
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 25,
+    elevation: 5,
+  },
+  historyButtonText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "bold",
+  },
+});
