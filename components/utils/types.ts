@@ -1,5 +1,5 @@
 // タイプ定義ファイル
-import * as Location from 'expo-location';
+import * as Location from "expo-location";
 
 export interface Post {
   id: string;
@@ -10,6 +10,7 @@ export interface Post {
   };
   timestamp: Date;
   author: string;
+  parentPostID?: string; // 返信の場合の親投稿ID（任意）
   image?: string;
   imagePosition?: {
     x: number;
