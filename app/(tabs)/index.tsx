@@ -13,7 +13,6 @@ import {
   Platform,
   SafeAreaView,
   ScrollView,
-  StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
@@ -1164,13 +1163,13 @@ export default function HomeScreen() {
               </View>
               {/* 画像プレビュー表示 */}
               {selectedImage && (
-                <View style={Bstyle.imagePreviewContainer}>
+                <View style={styles.imagePreviewContainer}>
                   <Image
                     source={{ uri: selectedImage.uri }}
-                    style={Bstyle.imagePreview}
+                    style={styles.imagePreview}
                   />
                   <TouchableOpacity
-                    style={Bstyle.removeImageButton}
+                    style={styles.removeImageButton}
                     onPress={removeSelectedImage}
                   >
                     <Ionicons name="close-circle" size={24} color="red" />
@@ -1180,10 +1179,10 @@ export default function HomeScreen() {
 
               {/* 画像選択ボタン */}
               <TouchableOpacity
-                style={Bstyle.imagePickerButton}
+                style={styles.imagePickerButton}
                 onPress={handleShowImagePickerOptions}
               >
-                <Text style={Bstyle.imagePickerButtonText}>画像を選択</Text>
+                <Text style={styles.imagePickerButtonText}>画像を選択</Text>
               </TouchableOpacity>
             </ScrollView>
             <View style={styles.modalFooter}>
@@ -1286,58 +1285,3 @@ export default function HomeScreen() {
     </SafeAreaView>
   );
 }
-
-const Bstyle = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#ffffff",
-    justifyContent: "flex-start",
-    alignItems: "center",
-    paddingTop: 80,
-  },
-  historyButton: {
-    position: "absolute",
-    bottom: 30, // 下からの位置
-    right: 20, // 右からの位置
-    backgroundColor: "#4682B4",
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 25,
-    elevation: 5,
-  },
-  historyButtonText: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "bold",
-  },
-  //下記、画像投稿に関する部分
-  imagePreviewContainer: {
-    position: "relative",
-    marginTop: 10,
-    alignItems: "center",
-  },
-  imagePreview: {
-    width: 200,
-    height: 200,
-    borderRadius: 8,
-  },
-  removeImageButton: {
-    position: "absolute",
-    top: 5,
-    right: 5,
-    backgroundColor: "white",
-    borderRadius: 12,
-  },
-  imagePickerButton: {
-    marginTop: 10,
-    backgroundColor: "#007AFF",
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-    alignSelf: "center",
-  },
-  imagePickerButtonText: {
-    color: "white",
-    fontWeight: "bold",
-  },
-});

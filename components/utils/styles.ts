@@ -589,4 +589,41 @@ export const styles = StyleSheet.create({
     color: "#666",
     marginLeft: 4,
   },
+  historyButton: {
+    position: "absolute",
+    bottom: 30, // 下からの位置
+    right: 20, // 右からの位置
+    backgroundColor: "#4682B4",
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 25,
+    elevation: 5,
+  },
+  historyButtonText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "bold",
+  },
+  //下記、画像投稿に関する部分
+  imagePreviewContainer: {
+    position: "relative",
+    marginTop: 10,
+    alignItems: "center",
+  },
+  imagePreview: {
+    width: 200,
+    height: 200,
+    borderRadius: 8,
+  },
+  removeImageButton: {
+    position: "absolute",
+    top: 5,
+    right: 5,
+    backgroundColor: "white",
+    borderRadius: 12,
+  },
+  imagePickerButtonText: {
+    color: "white",
+    fontWeight: "bold",
+  },
 });
