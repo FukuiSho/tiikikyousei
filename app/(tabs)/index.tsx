@@ -19,10 +19,13 @@ import {
 } from "react-native";
 import MapView, { Marker } from "react-native-maps";
 
-// 型とユーティリティのインポート
+// 型とユーチE��リチE��のインポ�EチE
 import { styles } from "../../components/utils/styles";
 import { Post, Reply } from "../../components/utils/types";
-import { saveLocationToFirestore, getEncounterHistory } from "../../services/locationService";
+import {
+  getEncounterHistory,
+  saveLocationToFirestore,
+} from "../../services/locationService";
 import {
   getNearbyPosts,
   savePostToFirestore,
@@ -30,7 +33,7 @@ import {
 } from "../../services/postService";
 import { getPersistentUserId } from "../../services/userService";
 
-// 使うリアクションの種類をここで定義します
+// 使ぁE��アクションの種類をここで定義しまぁE
 const reactionImages: { [key: string]: any } = {
   "1": require("../../assets/images/face1.png"),
   "2": require("../../assets/images/face2.png"),
@@ -40,12 +43,12 @@ const reactionImages: { [key: string]: any } = {
   "6": require("../../assets/images/face6.png"),
 };
 
-// リアクション画像の安全な取得関数
+// リアクション画像�E安�Eな取得関数
 const getReactionImage = (emoji: string) => {
   if (reactionImages[emoji]) {
     return reactionImages[emoji];
   }
-  // フォールバック画像（最初の画像を使用）
+  // フォールバック画像（最初�E画像を使用�E�E
   return reactionImages["1"];
 };
 
@@ -84,45 +87,46 @@ export default function HomeScreen() {
   const [encounterHistoryVisible, setEncounterHistoryVisible] = useState(false);
   const [encounterHistory, setEncounterHistory] = useState<any[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
+
   // const [locationHistory, setLocationHistory] = useState<LocationData[]>([]);
   const [isLocationTracking, setIsLocationTracking] = useState(false);
 
-  // アニメーション用の値（初期値は画面外の下に設定）
+  // アニメーション用の値�E��E期値は画面外�E下に設定！E
   const slideAnim = useRef(new Animated.Value(height * 0.5)).current;
   // MapViewのref
-  const mapRef = useRef<MapView>(null); // 位置情報取得のインターバル参照
+  const mapRef = useRef<MapView>(null); // 位置惁E��取得�Eインターバル参�E
   const locationIntervalRef = useRef<ReturnType<typeof setInterval> | null>(
     null
   );
   useEffect(() => {
-    // 永続的なユーザーIDを取得
+    // 永続的なユーザーIDを取征E
     const initializeUserId = async () => {
       const userId = await getPersistentUserId();
       setCurrentUserId(userId);
       console.log("現在のユーザーID:", userId);
 
-      // デフォルトの投稿内容を空に設定
+      // チE��ォルト�E投稿冁E��を空に設宁E
       setNewPost({ content: "" });
       setNewReply({ content: "" });
     };
 
     initializeUserId();
 
-    // 位置情報取得と保存の処理
+    // 位置惁E��取得と保存�E処琁E
     const initializeLocationTracking = async () => {
-      // 1分おきに位置情報を取得してFirestoreに保存する関数
+      // 1刁E��きに位置惁E��を取得してFirestoreに保存する関数
       const startLocationTracking = () => {
         setIsLocationTracking(true);
-        console.log("位置情報の定期取得を開始しました（1分間隔）");
+        console.log("位置情報の定期取得を開始しました（5秒間隔）");
 
         locationIntervalRef.current = setInterval(async () => {
           try {
-            console.log("定期取得：位置情報を取得中...");
+            console.log("定期取得：位置惁E��を取得中...");
             const savedLocation = await saveLocationToFirestore(currentUserId);
 
             if (savedLocation) {
               // 現在地を更新
-              console.log("定期取得：現在地を再取得中...");
+              console.log("定期取得：現在地を�E取得中...");
               const currentLocation = await Location.getCurrentPositionAsync({
                 accuracy: Location.Accuracy.High,
               });
@@ -133,16 +137,16 @@ export default function HomeScreen() {
               const nearbyPosts = await getNearbyPosts(
                 currentLocation.coords.latitude,
                 currentLocation.coords.longitude,
-                1.0 // 1km圏内
+                1.0 // 1km圏�E
               );
 
               if (nearbyPosts.length > 0) {
-                console.log(`周辺投稿を${nearbyPosts.length}件取得しました`);
-                // Firestoreから取得した投稿をローカルの投稿リストと統合
+                console.log(`周辺投稿めE{nearbyPosts.length}件取得しました`);
+                // Firestoreから取得した投稿をローカルの投稿リストと統吁E
                 const convertedPosts = nearbyPosts.map((firestorePost) => {
-                  // Firestoreのリアクション情報を変換
+                  // Firestoreのリアクション惁E��を変換
                   const reactions: { [userID: string]: string } = {};
-                  const reactionCounts: { [emoji: number] : number } = {};
+                  const reactionCounts: { [emoji: string]: number } = {};
 
                   if (
                     firestorePost.reactions &&
@@ -157,7 +161,7 @@ export default function HomeScreen() {
                         ) {
                           reactionCounts[emoji] =
                             data.count || data.userIds.length;
-                          // 各ユーザーの反応を記録
+                          // 吁E��ーザーの反応を記録
                           data.userIds.forEach((userId: string) => {
                             reactions[userId] = emoji;
                           });
@@ -169,7 +173,7 @@ export default function HomeScreen() {
                   return {
                     id: firestorePost.id,
                     content: firestorePost.text,
-                    author: `User-${firestorePost.userID.slice(-6)}`, // ユーザーIDベースの表示名
+                    author: `User-${firestorePost.userID.slice(-6)}`, // ユーザーIDベ�Eスの表示吁E
                     location: {
                       latitude: firestorePost.coordinates.latitude,
                       longitude: firestorePost.coordinates.longitude,
@@ -178,11 +182,11 @@ export default function HomeScreen() {
                     parentPostID: firestorePost.parentPostID, // 親投稿IDを含める
                     reactions: reactions,
                     reactionCounts: reactionCounts,
-                    replies: [], // 返信は別途取得する場合
+                    replies: [], // 返信は別途取得する場吁E
                   };
                 });
 
-                // 既存の投稿を更新または新しい投稿を追加
+                // 既存�E投稿を更新また�E新しい投稿を追加
                 setPosts((prevPosts) => {
                   const updatedPosts = [...prevPosts];
                   let hasNewPosts = false;
@@ -192,7 +196,7 @@ export default function HomeScreen() {
                       (p) => p.id === newPost.id
                     );
                     if (existingPostIndex >= 0) {
-                      // 既存の投稿を更新（リアクション情報など）
+                      // 既存�E投稿を更新�E�リアクション惁E��など�E�E
                       updatedPosts[existingPostIndex] = {
                         ...updatedPosts[existingPostIndex],
                         reactions: newPost.reactions,
@@ -215,18 +219,18 @@ export default function HomeScreen() {
                 console.log("周辺に新しい投稿はありません");
               }
 
-              console.log("定期取得：位置情報を保存しました");
+              console.log("定期取得：位置惁E��を保存しました");
             } else {
-              console.error("定期取得：位置情報の保存に失敗しました");
+              console.error("定期取得：位置惁E��の保存に失敗しました");
             }
           } catch (error) {
-            console.error("位置情報の定期取得でエラーが発生しました:", error);
+            console.error("位置惁E��の定期取得でエラーが発生しました:", error);
           }
-        }, 5000); // 60秒（1分）間隔
+        }, 5000); // 60秒！E刁E��間隁E
       };
 
       try {
-        console.log("位置情報の許可を要求中...");
+        console.log("位置惁E��の許可を要求中...");
         let { status } = await Location.requestForegroundPermissionsAsync();
         console.log("位置情報の許可ステータス:", status);
 
@@ -239,35 +243,35 @@ export default function HomeScreen() {
         let currentLocation = await Location.getCurrentPositionAsync({
           accuracy: Location.Accuracy.High,
         });
-        console.log("位置情報取得成功:", currentLocation.coords);
+        console.log("位置惁E��取得�E劁E", currentLocation.coords);
         setLocation(currentLocation);
 
-        // 初回の位置情報をFirestoreに保存
-        console.log("Firestoreに位置情報を保存中...");
+        // 初回の位置惁E��をFirestoreに保孁E
+        console.log("Firestoreに位置惁E��を保存中...");
         const savedLocation = await saveLocationToFirestore(currentUserId);
         if (savedLocation) {
-          console.log("初回位置情報を保存しました");
+          console.log("初回位置惁E��を保存しました");
         } else {
-          console.error("初回位置情報の保存に失敗しました");
+          console.error("初回位置惁E��の保存に失敗しました");
         }
 
-        // 初回の周辺投稿取得
-        console.log("初回：周辺投稿を取得中...");
+        // 初回の周辺投稿取征E
+        console.log("初回�E�周辺投稿を取得中...");
         const initialNearbyPosts = await getNearbyPosts(
           currentLocation.coords.latitude,
           currentLocation.coords.longitude,
-          1.0 // 1km圏内
+          1.0 // 1km圏�E
         );
 
         if (initialNearbyPosts.length > 0) {
           console.log(
-            `初回：周辺投稿を${initialNearbyPosts.length}件取得しました`
+            `初回�E�周辺投稿めE{initialNearbyPosts.length}件取得しました`
           );
-          // Firestoreから取得した投稿をローカルの投稿リストに設定
+          // Firestoreから取得した投稿をローカルの投稿リストに設宁E
           const convertedPosts = initialNearbyPosts.map((firestorePost) => {
             // Firestoreのリアクション情報を変換
             const reactions: { [userID: string]: string } = {};
-            const reactionCounts: { [emoji: number] : number } = {};
+            const reactionCounts: { [emoji: string]: number } = {};
 
             if (
               firestorePost.reactions &&
@@ -277,7 +281,7 @@ export default function HomeScreen() {
                 ([emoji, data]: [string, any]) => {
                   if (data && data.userIds && Array.isArray(data.userIds)) {
                     reactionCounts[emoji] = data.count || data.userIds.length;
-                    // 各ユーザーの反応を記録
+                    // 吁E��ーザーの反応を記録
                     data.userIds.forEach((userId: string) => {
                       reactions[userId] = emoji;
                     });
@@ -289,7 +293,7 @@ export default function HomeScreen() {
             return {
               id: firestorePost.id,
               content: firestorePost.text,
-              author: `User-${firestorePost.userID.slice(-6)}`, // ユーザーIDベースの表示名
+              author: `User-${firestorePost.userID.slice(-6)}`, // ユーザーIDベ�Eスの表示吁E
               location: {
                 latitude: firestorePost.coordinates.latitude,
                 longitude: firestorePost.coordinates.longitude,
@@ -298,45 +302,45 @@ export default function HomeScreen() {
               parentPostID: firestorePost.parentPostID, // 親投稿IDを含める
               reactions: reactions,
               reactionCounts: reactionCounts,
-              replies: [], // 返信は別途取得する場合
+              replies: [], // 返信は別途取得する場吁E
             };
           });
           setPosts(convertedPosts);
         } else {
-          console.log("初回：周辺に投稿はありません");
+          console.log("初回�E�周辺に投稿はありません");
         }
 
-        // 1分おきの位置情報取得を開始
+        // 1刁E��き�E位置惁E��取得を開姁E
         startLocationTracking();
       } catch (error) {
-        console.error("位置情報取得処理でエラーが発生しました:", error);
+        console.error("位置惁E��取得�E琁E��エラーが発生しました:", error);
         Alert.alert(
           "エラー",
-          "位置情報の取得に失敗しました: " +
+          "位置惁E��の取得に失敗しました: " +
             (error instanceof Error ? error.message : String(error))
         );
       }
     };
 
-    // ユーザーIDが設定された後に位置情報処理を開始
+    // ユーザーIDが設定された後に位置惁E��処琁E��開姁E
     if (currentUserId) {
       initializeLocationTracking();
     }
 
-    // コンポーネントがアンマウントされるときにインターバルをクリア
+    // コンポ�Eネントがアンマウントされるときにインターバルをクリア
     return () => {
       if (locationIntervalRef.current) {
         clearInterval(locationIntervalRef.current);
       }
     };
-  }, [currentUserId]); // currentUserIdが設定されたときに実行
-  // テスト用の投稿を追加（最初の位置情報取得時のみ）
+  }, [currentUserId]); // currentUserIdが設定されたときに実衁E
+  // チE��ト用の投稿を追加�E�最初�E位置惁E��取得時のみ�E�E
   useEffect(() => {
     if (location && posts.length === 0) {
       // postsが空の場合のみ実行
       const testPost: Post = {
         id: "test-1",
-        content: "これはテスト投稿です。",
+        content: "これはテスト投稿です",
         author: "テストユーザー",
         location: {
           latitude: location.coords.latitude,
@@ -351,7 +355,7 @@ export default function HomeScreen() {
     }
   }, [location, posts.length]);
 
-  // キーボードイベントリスナー
+  // キーボ�Eドイベントリスナ�E
   useEffect(() => {
     const keyboardDidShowListener = Keyboard.addListener(
       "keyboardDidShow",
@@ -369,34 +373,34 @@ export default function HomeScreen() {
   }, []);
   const handleCreatePost = async () => {
     if (!newPost.content.trim()) {
-      Alert.alert("エラー", "投稿内容を入力してください");
+      Alert.alert("エラー", "投稿冁E��を�E力してください");
       return;
     }
 
     if (!location) {
-      Alert.alert("エラー", "位置情報が取得できません");
+      Alert.alert("エラー", "位置惁E��が取得できません");
       return;
     }
 
     try {
-      console.log("投稿作成開始 - UserID:", currentUserId);
+      console.log("投稿作�E開姁E- UserID:", currentUserId);
 
-      // Firestoreに投稿を保存（ID, coordinates, geohash, text, photoURL, timestamp, userID, parentPostID, reactions を含む）
+      // Firestoreに投稿を保存！ED, coordinates, geohash, text, photoURL, timestamp, userID, parentPostID, reactions を含む�E�E
       const postId = await savePostToFirestore({
         text: newPost.content,
         latitude: location.coords.latitude,
         longitude: location.coords.longitude,
-        photoURL: undefined, // 後で画像アップロード機能を追加
+        photoURL: undefined, // 後で画像アチE�Eロード機�Eを追加
       });
 
       if (postId) {
-        console.log("投稿保存成功 - PostID:", postId);
+        console.log("投稿保存�E劁E- PostID:", postId);
 
-        // ローカルの投稿リストにも追加（UIの即座更新のため）
+        // ローカルの投稿リストにも追加�E�EIの即座更新のため�E�E
         const post: Post = {
           id: postId,
           content: newPost.content,
-          author: `User-${currentUserId.slice(-6)}`, // ユーザーIDベースの作成者名
+          author: `User-${currentUserId.slice(-6)}`, // ユーザーIDベ�Eスの作�E老E��
           location: {
             latitude: location.coords.latitude,
             longitude: location.coords.longitude,
@@ -407,16 +411,16 @@ export default function HomeScreen() {
           reactionCounts: {},
         };
 
-        setPosts([post, ...posts]); // 新しい投稿を先頭に追加
+        setPosts([post, ...posts]); // 新しい投稿を�E頭に追加
         setNewPost({ content: "" }); // 内容をクリア
         setModalVisible(false);
-        Alert.alert("成功", "投稿が作成されました！");
+        Alert.alert("成功", "投稿が作成されました");
       } else {
         Alert.alert("エラー", "投稿の保存に失敗しました");
       }
     } catch (error) {
-      console.error("投稿作成エラー:", error);
-      Alert.alert("エラー", "投稿の作成に失敗しました");
+      console.error("投稿作�Eエラー:", error);
+      Alert.alert("エラー", "投稿の作�Eに失敗しました");
     }
   };
   const handleCancelPost = () => {
@@ -427,15 +431,15 @@ export default function HomeScreen() {
     setSelectedLocation(post.location);
     setMessageListVisible(true);
 
-    // マップの位置を調整：マップ全体を下に移動して投稿位置を画面上部に表示
-    // メッセージリストが画面の下半分を占めるので、マップの中心を北（上）に移動
-    const offsetLatitude = -0.001; // 緯度のオフセット（北に移動してマップ全体を下げる）
+    // マップ�E位置を調整�E��EチE�E全体を下に移動して投稿位置を画面上部に表示
+    // メチE��ージリストが画面の下半刁E��占めるので、�EチE�Eの中忁E��北（上）に移勁E
+    const offsetLatitude = -0.001; // 緯度のオフセチE���E�北に移動してマップ�E体を下げる！E
     mapRef.current?.animateToRegion(
       {
         latitude: post.location.latitude + offsetLatitude,
         longitude: post.location.longitude,
-        latitudeDelta: 0.002, // 約200m範囲（高倍率）
-        longitudeDelta: 0.002, // 約200m範囲（高倍率）
+        latitudeDelta: 0.002, // 紁E00m篁E���E�高倍率�E�E
+        longitudeDelta: 0.002, // 紁E00m篁E���E�高倍率�E�E
       },
       1000
     );
@@ -448,14 +452,14 @@ export default function HomeScreen() {
     }).start();
   };
   const handleCloseMessageList = () => {
-    // マップを現在地中心に戻す
+    // マップを現在地中忁E��戻ぁE
     if (location) {
       mapRef.current?.animateToRegion(
         {
           latitude: location.coords.latitude,
           longitude: location.coords.longitude,
-          latitudeDelta: 0.01, // 通常表示（約1km範囲）
-          longitudeDelta: 0.01, // 通常表示（約1km範囲）
+          latitudeDelta: 0.01, // 通常表示�E�紁Ekm篁E���E�E
+          longitudeDelta: 0.01, // 通常表示�E�紁Ekm篁E���E�E
         },
         1000
       );
@@ -474,32 +478,32 @@ export default function HomeScreen() {
 
   const getPostsForLocation = () => {
     if (!selectedLocation) return [];
-    // 選択された場所の近くの投稿を取得（半径1km以内など）
+    // 選択された場所の近くの投稿を取得（半征Ekm以冁E��ど�E�E
     const nearbyPosts = posts.filter((post) => {
       const distance = Math.sqrt(
         Math.pow(post.location.latitude - selectedLocation.latitude, 2) +
           Math.pow(post.location.longitude - selectedLocation.longitude, 2)
       );
-      return distance < 0.01; // 約1km
+      return distance < 0.01; // 紁Ekm
     });
 
-    // 親投稿のみを返す（parentPostIDがないもの）
+    // 親投稿のみを返す�E�EarentPostIDがなぁE��の�E�E
     return nearbyPosts.filter((post) => !post.parentPostID);
   };
 
   /**
-   * 指定された親投稿IDのリプライを取得
+   * 持E��された親投稿IDのリプライを取征E
    */
   const getRepliesForPost = (parentPostId: string) => {
     if (!selectedLocation) return [];
 
-    // 選択された場所の近くの投稿から、指定された親投稿のリプライのみを取得
+    // 選択された場所の近くの投稿から、指定された親投稿のリプライのみを取征E
     const nearbyPosts = posts.filter((post) => {
       const distance = Math.sqrt(
         Math.pow(post.location.latitude - selectedLocation.latitude, 2) +
           Math.pow(post.location.longitude - selectedLocation.longitude, 2)
       );
-      return distance < 0.01; // 約1km
+      return distance < 0.01; // 紁Ekm
     });
 
     // parentPostIDが一致するリプライのみを返す
@@ -517,40 +521,40 @@ export default function HomeScreen() {
   };
   const handleReplySubmit = async (postId: string) => {
     if (!newReply.content.trim()) {
-      Alert.alert("エラー", "返信内容を入力してください");
+      Alert.alert("エラー", "返信冁E��を�E力してください");
       return;
     }
 
     if (!location) {
-      Alert.alert("エラー", "位置情報が取得できません");
+      Alert.alert("エラー", "位置惁E��が取得できません");
       return;
     }
 
     try {
       console.log(
-        "返信作成開始 - UserID:",
+        "返信作�E開姁E- UserID:",
         currentUserId,
         "ParentPostID:",
         postId
       );
 
-      // Firestoreに返信を保存（ID, coordinates, geohash, text, photoURL, timestamp, userID, parentPostID, reactions を含む）
+      // Firestoreに返信を保存！ED, coordinates, geohash, text, photoURL, timestamp, userID, parentPostID, reactions を含む�E�E
       const replyId = await savePostToFirestore({
         text: newReply.content,
         latitude: location.coords.latitude,
         longitude: location.coords.longitude,
-        parentPostID: postId, // 親投稿IDを指定
+        parentPostID: postId, // 親投稿IDを指宁E
         photoURL: undefined,
       });
 
       if (replyId) {
-        console.log("返信保存成功 - ReplyID:", replyId);
+        console.log("返信保存�E劁E- ReplyID:", replyId);
 
-        // ローカルの投稿リストにも反映（UIの即座更新のため）
+        // ローカルの投稿リストにも反映�E�EIの即座更新のため�E�E
         const reply: Reply = {
           id: replyId,
           content: newReply.content,
-          author: `User-${currentUserId.slice(-6)}`, // ユーザーIDベースの作成者名
+          author: `User-${currentUserId.slice(-6)}`, // ユーザーIDベ�Eスの作�E老E��
           timestamp: new Date(),
           reactions: {},
           reactionCounts: {},
@@ -568,17 +572,17 @@ export default function HomeScreen() {
           })
         );
 
-        // 入力フィールドをクリアしてキーボードを閉じる
-        setNewReply({ content: "" }); // 内容をクリア
+        // 入力フィールドをクリアしてキーボ�Eドを閉じめE
+        setNewReply({ content: "" }); // 冁E��をクリア
         setReplyMode(null);
         Keyboard.dismiss();
-        Alert.alert("成功", "返信が投稿されました！");
+        Alert.alert("成功", "返信が投稿されました");
       } else {
         Alert.alert("エラー", "返信の保存に失敗しました");
       }
     } catch (error) {
-      console.error("返信作成エラー:", error);
-      Alert.alert("エラー", "返信の作成に失敗しました");
+      console.error("返信作�Eエラー:", error);
+      Alert.alert("エラー", "返信の作�Eに失敗しました");
     }
   };
 
@@ -590,10 +594,10 @@ export default function HomeScreen() {
   ) => {
     try {
       console.log(
-        `リアクション処理開始: PostID=${postId}, Emoji=${pickerLabel}`
+        `リアクション処琁E��姁E PostID=${postId}, Emoji=${pickerLabel}`
       );
 
-      // Firestoreに保存
+      // Firestoreに保孁E
       const success = await updatePostReaction(postId, pickerLabel);
 
       if (!success) {
@@ -601,18 +605,18 @@ export default function HomeScreen() {
         return;
       }
 
-      // ローカルの投稿リストも更新（UIの即座更新のため）
+      // ローカルの投稿リストも更新�E�EIの即座更新のため�E�E
       setPosts(
         posts.map((post) => {
           if (post.id === postId) {
             const reactions = { ...(post.reactions || {}) };
             const reactionCounts = { ...(post.reactionCounts || {}) };
 
-            // 既存のリアクションを確認
+            // 既存�Eリアクションを確誁E
             const currentReaction = reactions[currentUserId];
 
             if (currentReaction === pickerLabel) {
-              // 同じ絵文字の場合は削除
+              // 同じ絵斁E���E場合�E削除
               delete reactions[currentUserId];
               reactionCounts[pickerLabel] = Math.max(
                 0,
@@ -622,9 +626,9 @@ export default function HomeScreen() {
                 delete reactionCounts[pickerLabel];
               }
             } else {
-              // 異なる絵文字または新規の場合
+              // 異なる絵斁E��また�E新規�E場吁E
               if (currentReaction) {
-                // 既存のリアクションを減らす
+                // 既存�Eリアクションを減らぁE
                 reactionCounts[currentReaction] = Math.max(
                   0,
                   (reactionCounts[currentReaction] || 0) - 1
@@ -649,22 +653,22 @@ export default function HomeScreen() {
         })
       );
 
-      // リアクション更新後、最新の投稿データを取得して同期
+      // リアクション更新後、最新の投稿チE�Eタを取得して同期
       if (location) {
         try {
-          console.log("リアクション後の投稿データ同期中...");
+          console.log("リアクション後�E投稿チE�Eタ同期中...");
           const updatedNearbyPosts = await getNearbyPosts(
             location.coords.latitude,
             location.coords.longitude,
             1.0
           );
 
-          // Firestoreから取得した最新データでローカル状態を更新
+          // Firestoreから取得した最新チE�Eタでローカル状態を更新
           if (updatedNearbyPosts.length > 0) {
             const convertedPosts = updatedNearbyPosts.map((firestorePost) => {
               // Firestoreのリアクション情報を変換
               const reactions: { [userID: string]: string } = {};
-              const reactionCounts: { [emoji: number] : number } = {};
+              const reactionCounts: { [emoji: string]: number } = {};
 
               if (
                 firestorePost.reactions &&
@@ -699,7 +703,7 @@ export default function HomeScreen() {
               };
             });
 
-            // 既存の投稿を更新（リアクション情報のみ）
+            // 既存�E投稿を更新�E�リアクション惁E��のみ�E�E
             setPosts((prevPosts) => {
               const updatedPosts = [...prevPosts];
 
@@ -722,7 +726,7 @@ export default function HomeScreen() {
           }
         } catch (syncError) {
           console.error("リアクション後の同期エラー:", syncError);
-          // 同期に失敗してもローカル更新は継続
+          // 同期に失敗してもローカル更新は継綁E
         }
       }
 
@@ -745,13 +749,13 @@ export default function HomeScreen() {
   // すれ違い履歴を取得する関数
   const fetchEncounterHistory = async () => {
     if (!currentUserId) return;
-    
+
     setLoadingHistory(true);
     try {
       console.log("すれ違い履歴を取得中...");
       const history = await getEncounterHistory(currentUserId);
       setEncounterHistory(history);
-      console.log(`すれ違い履歴を${history.length}件取得しました`);
+      console.log(`すれ違い履歴めE{history.length}件取得しました`);
     } catch (error) {
       console.error("すれ違い履歴取得エラー:", error);
       Alert.alert("エラー", "すれ違い履歴の取得に失敗しました");
@@ -769,20 +773,8 @@ export default function HomeScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>地域共生アプリ</Text>
+        <Text style={styles.headerTitle}>地域�E生アプリ</Text>
         <View style={{ flexDirection: "row", alignItems: "center" }}>
-          {/* すれ違い履歴ボタン */}
-          <TouchableOpacity
-            style={{
-              padding: 8,
-              marginRight: 12,
-              backgroundColor: "#007AFF",
-              borderRadius: 8,
-            }}
-            onPress={handleOpenEncounterHistory}
-          >
-            <Ionicons name="people" size={20} color="white" />
-          </TouchableOpacity>
           <View
             style={{
               width: 8,
@@ -793,7 +785,7 @@ export default function HomeScreen() {
             }}
           />
           <Text style={{ fontSize: 12, color: "#666" }}>
-            {isLocationTracking ? "位置追跡中" : "待機中"}
+            {isLocationTracking ? "位置追跡中" : "征E��中"}
           </Text>
         </View>
       </View>
@@ -805,17 +797,17 @@ export default function HomeScreen() {
             initialRegion={{
               latitude: location.coords.latitude,
               longitude: location.coords.longitude,
-              latitudeDelta: 0.01, // 初期表示は少し広めに設定（約1km範囲）
-              longitudeDelta: 0.01, // 初期表示は少し広めに設定（約1km範囲）
+              latitudeDelta: 0.01, // 初期表示は少し庁E��に設定（紁Ekm篁E���E�E
+              longitudeDelta: 0.01, // 初期表示は少し庁E��に設定（紁Ekm篁E���E�E
             }}
-            // コメントリスト表示時はマップ操作を無効化
+            // コメントリスト表示時�Eマップ操作を無効匁E
             scrollEnabled={!messageListVisible}
             zoomEnabled={!messageListVisible}
             rotateEnabled={!messageListVisible}
             pitchEnabled={!messageListVisible}
             moveOnMarkerPress={!messageListVisible}
             onTouchStart={() => {
-              // コメントリスト表示時はマップタッチを無効化
+              // コメントリスト表示時�EマップタチE��を無効匁E
               if (messageListVisible) {
                 return false;
               }
@@ -827,7 +819,7 @@ export default function HomeScreen() {
                 longitude: location.coords.longitude,
               }}
               title="現在地"
-              description="あなたの現在位置"
+              description="あなた�E現在位置"
               pinColor="blue"
             />
             {posts.map((post) => (
@@ -844,7 +836,7 @@ export default function HomeScreen() {
               />
             ))}
           </MapView>
-          {/* コメントリスト表示時のマップ操作防止オーバーレイ */}
+          {/* コメントリスト表示時�Eマップ操作防止オーバ�Eレイ */}
           {messageListVisible && (
             <View
               style={{
@@ -856,16 +848,16 @@ export default function HomeScreen() {
                 backgroundColor: "transparent",
                 zIndex: 999,
               }}
-              pointerEvents="none" // マップのタッチを無効化
+              pointerEvents="none" // マップ�EタチE��を無効匁E
             />
           )}
         </>
       ) : (
         <View style={styles.loadingContainer}>
-          <Text style={styles.loadingText}>位置情報を取得中...</Text>
+          <Text style={styles.loadingText}>位置惁E��を取得中...</Text>
         </View>
       )}
-      {/* メッセージリストエリア */}
+      {/* メチE��ージリストエリア */}
       {messageListVisible && (
         <KeyboardAvoidingView
           style={styles.keyboardAvoidingView}
@@ -881,7 +873,7 @@ export default function HomeScreen() {
               },
             ]}
           >
-            {/* ハンドルバー */}
+            {/* ハンドルバ�E */}
             <TouchableOpacity onPress={handleCloseMessageList}>
               <View style={styles.handleBar} />
             </TouchableOpacity>
@@ -894,7 +886,7 @@ export default function HomeScreen() {
               </TouchableOpacity>
             </View>
 
-            {/* コメントリスト */}
+            {/* コメントリスチE*/}
             <ScrollView
               style={styles.messageList}
               contentContainerStyle={{ paddingBottom: 20 }}
@@ -914,7 +906,7 @@ export default function HomeScreen() {
                     <View style={styles.userIcon}>
                       <Ionicons name="person" size={20} color="#666" />
                     </View>
-                    {/* メッセージ内容 */}
+                    {/* メチE��ージ冁E�� */}
                     <View style={styles.messageContent}>
                       <Text style={styles.userName}>{post.author}</Text>
                       <Text style={styles.messageText}>{post.content}</Text>
@@ -1079,7 +1071,7 @@ export default function HomeScreen() {
                     <View style={styles.replyForm}>
                       <TextInput
                         style={styles.replyInput}
-                        placeholder="返信を入力..."
+                        placeholder="返信を�E劁E.."
                         value={newReply.content}
                         onChangeText={(text) =>
                           setNewReply({ ...newReply, content: text })
@@ -1112,7 +1104,7 @@ export default function HomeScreen() {
               {getPostsForLocation().length === 0 && (
                 <View style={styles.emptyState}>
                   <Text style={styles.emptyStateText}>
-                    この場所にはまだコメントがありません
+                    こ�E場所にはまだコメントがありません
                   </Text>
                 </View>
               )}
@@ -1120,12 +1112,20 @@ export default function HomeScreen() {
           </Animated.View>
         </KeyboardAvoidingView>
       )}
-      {/* フローティング投稿ボタン */}
+      {/* フローチE��ングボタン群 */}
+      {/* すれ違い履歴ボタン */}
+      <TouchableOpacity
+        style={styles.floatingButtonSecondary}
+        onPress={handleOpenEncounterHistory}
+      >
+        <Ionicons name="people" size={28} color="white" />
+      </TouchableOpacity>
+      {/* フローチE��ング投稿ボタン */}
       <TouchableOpacity
         style={styles.floatingButton}
         onPress={() => setModalVisible(true)}
       >
-        <Ionicons name="add" size={28} color="white" />{" "}
+        <Ionicons name="add" size={28} color="white" />
       </TouchableOpacity>
       <Modal
         animationType="slide"
@@ -1157,7 +1157,7 @@ export default function HomeScreen() {
                 <Text style={styles.label}>内容</Text>
                 <TextInput
                   style={[styles.input, styles.textArea]}
-                  placeholder="投稿の内容を入力"
+                  placeholder="投稿の内容を入力してください"
                   value={newPost.content}
                   onChangeText={(text) =>
                     setNewPost({ ...newPost, content: text })
@@ -1221,7 +1221,7 @@ export default function HomeScreen() {
                 marginBottom: 15,
               }}
             >
-              リアクションを選択
+              リアクションを選抁E
             </Text>
             <View
               style={{
@@ -1285,46 +1285,69 @@ export default function HomeScreen() {
                 <Ionicons name="close" size={24} color="#666" />
               </TouchableOpacity>
             </View>
-            
+
             <ScrollView style={styles.modalBody}>
               {loadingHistory ? (
-                <View style={{ alignItems: 'center', padding: 20 }}>
+                <View style={{ alignItems: "center", padding: 20 }}>
                   <Text>履歴を読み込み中...</Text>
                 </View>
               ) : encounterHistory.length === 0 ? (
-                <View style={{ alignItems: 'center', padding: 20 }}>
-                  <Text style={{ fontSize: 16, color: '#666' }}>
+                <View style={{ alignItems: "center", padding: 20 }}>
+                  <Text style={{ fontSize: 16, color: "#666" }}>
                     まだすれ違いの履歴がありません
                   </Text>
                 </View>
               ) : (
                 encounterHistory.map((encounter, index) => (
-                  <View key={index} style={{
-                    backgroundColor: '#f8f9fa',
-                    padding: 15,
-                    marginBottom: 10,
-                    borderRadius: 10,
-                    borderWidth: 1,
-                    borderColor: '#e9ecef'
-                  }}>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 10 }}>
-                      <Ionicons name="person-circle" size={40} color="#007AFF" />
+                  <View
+                    key={index}
+                    style={{
+                      backgroundColor: "#f8f9fa",
+                      padding: 15,
+                      marginBottom: 10,
+                      borderRadius: 10,
+                      borderWidth: 1,
+                      borderColor: "#e9ecef",
+                    }}
+                  >
+                    <View
+                      style={{
+                        flexDirection: "row",
+                        alignItems: "center",
+                        marginBottom: 10,
+                      }}
+                    >
+                      <Ionicons
+                        name="person-circle"
+                        size={40}
+                        color="#007AFF"
+                      />
                       <View style={{ marginLeft: 10, flex: 1 }}>
-                        <Text style={{ fontSize: 16, fontWeight: 'bold' }}>
-                          {encounter.otherUsername || `User-${encounter.otherUserId?.slice(-6)}`}
+                        <Text style={{ fontSize: 16, fontWeight: "bold" }}>
+                          {encounter.otherUsername ||
+                            `User-${encounter.otherUserId?.slice(-6)}`}
                         </Text>
-                        <Text style={{ fontSize: 12, color: '#666' }}>
-                          {encounter.timestamp?.toLocaleString('ja-JP')}
+                        <Text style={{ fontSize: 12, color: "#666" }}>
+                          {encounter.timestamp?.toLocaleString("ja-JP")}
                         </Text>
                       </View>
-                      <View style={{ alignItems: 'flex-end' }}>
-                        <Text style={{ fontSize: 12, color: '#007AFF' }}>
-                          距離: {encounter.distance ? `${encounter.distance.toFixed(0)}m` : '不明'}
+                      <View style={{ alignItems: "flex-end" }}>
+                        <Text style={{ fontSize: 12, color: "#007AFF" }}>
+                          距離:{" "}
+                          {encounter.distance
+                            ? `${encounter.distance.toFixed(0)}m`
+                            : "不�E"}
                         </Text>
                       </View>
                     </View>
                     {encounter.otherOneMessage && (
-                      <Text style={{ fontSize: 14, color: '#333', fontStyle: 'italic' }}>
+                      <Text
+                        style={{
+                          fontSize: 14,
+                          color: "#333",
+                          fontStyle: "italic",
+                        }}
+                      >
                         {encounter.otherOneMessage}
                       </Text>
                     )}

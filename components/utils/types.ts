@@ -69,3 +69,26 @@ export interface ImageState {
     y: number;
   } | null;
 }
+
+export interface UserProfile {
+  userId?: string;
+  displayName?: string;
+  gender?: string;
+  bloodType?: string;
+  hometown?: string;
+  birthday?: Date;
+  worries?: string;
+  selfIntroduction?: string;
+  tags?: string[];
+  oneMessage?: string;
+}
+
+export interface UserProfileUpdateData {
+  gender: string;
+  bloodType: string;
+  hometown: string;
+  birthday?: Date;
+  worries: string;
+  selfIntroduction: string;
+  tags: string[];
+}

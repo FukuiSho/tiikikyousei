@@ -33,12 +33,12 @@ export const getPersistentUserId = async (): Promise<string> => {
 
 /**
  * ユニークなユーザーIDを生成
- * タイムスタンプ + ランダム文字列の組み合わせ
+ * タイムスタンプ + ランダム文字列の組み合わせ（user-プレフィックスなし）
  */
 const generateUniqueUserId = (): string => {
   const timestamp = Date.now();
   const randomPart = Math.random().toString(36).substring(2, 8);
-  return `user-${timestamp}-${randomPart}`;
+  return `${timestamp}-${randomPart}`;
 };
 
 /**

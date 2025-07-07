@@ -12,6 +12,19 @@ import {
 } from "firebase/firestore";
 import { db } from "../firebase.config";
 
+// ユーザーIDを正規化する関数（user_プレフィックスの重複を防ぐ）
+const normalizeUserId = (userId: string): string => {
+  // user_プレフィックスがすでにある場合は除去
+  const cleanId = userId.replace(/^user_/, "");
+  return cleanId;
+};
+
+// Firestoreドキュメント用のIDを生成（user_プレフィックス付き）
+const generateDocumentId = (userId: string): string => {
+  const cleanId = normalizeUserId(userId);
+  return `user_${cleanId}`;
+};
+
 // 位置情報データの型定義
 export interface Users {
   id: string; // ID（仮のメールアドレス）
@@ -29,6 +42,9 @@ export interface Users {
     timestamps: Date[]; // 対応するタイムスタンプ
     locations: { latitude: number; longitude: number }[]; // 対応する位置情報
     distances: number[]; // 対応する距離（メートル）
+    usernames: string[]; // すれ違った時点での相手のユーザー名
+    oneMessages: string[]; // すれ違った時点での相手の一言メッセージ
+    icons: string[]; // すれ違った時点での相手のアイコン
     count: number; // 総すれ違い回数（パフォーマンス用）
   };
 }
@@ -47,9 +63,39 @@ export interface EncounterWithUserInfo {
 // 個別のすれ違い記録（内部処理用）
 interface EncounterRecord {
   userId: string;
+  username: string;
+  icon: string;
+  oneMessage: string;
   timestamp: Date;
   location: { latitude: number; longitude: number };
   distance: number;
+}
+
+// プロフィール情報の型定義
+export interface UserProfile {
+  id: string; // ドキュメントID（user_プレフィックス付きのユーザーID）
+  userId: string; // 元のユーザーID
+  profileID: string; // プロフィールID（userId + 'profile'）
+  gender?: string; // 性別
+  bloodType?: string; // 血液型
+  hometown?: string; // 出身地
+  birthday?: Date; // 誕生日
+  worries?: string; // 悩み
+  selfIntroduction?: string; // 自己紹介
+  tags?: string[]; // タグ（趣味、特技など）
+  createdAt: Date; // 作成日時
+  updatedAt: Date; // 更新日時
+}
+
+// プロフィール更新用の型（部分更新対応）
+export interface UserProfileUpdateData {
+  gender?: string;
+  bloodType?: string;
+  hometown?: string;
+  birthday?: Date;
+  worries?: string;
+  selfIntroduction?: string;
+  tags?: string[];
 }
 
 // 現在地を取得してFirestoreに保存
@@ -183,14 +229,22 @@ export const saveLocationToFirestore = async (
         timestamps: [],
         locations: [],
         distances: [],
+        usernames: [],
+        oneMessages: [],
+        icons: [],
         count: 0,
       },
     };
     console.log("Firestoreに保存するデータ:", locationData);
 
-    // ユーザーIDベースの固定ドキュメントIDを使用
-    const documentId = `user_${userId}`;
-    console.log("使用するドキュメントID:", documentId);
+    // ユーザーIDベースの固定ドキュメントIDを使用（正規化済み）
+    const documentId = generateDocumentId(userId);
+    console.log(
+      "使用するドキュメントID:",
+      documentId,
+      "元のユーザーID:",
+      userId
+    );
 
     // Firestoreに保存（既存のドキュメントを更新、encounters フィールドは保持）
     console.log("Firestoreに保存中...");
@@ -203,20 +257,42 @@ export const saveLocationToFirestore = async (
       timestamps: [],
       locations: [],
       distances: [],
+      usernames: [],
+      oneMessages: [],
+      icons: [],
       count: 0,
     };
+    let existingOneMessage = "現在地を共有しました"; // デフォルト値
 
     if (existingDoc.exists()) {
       const existingData = existingDoc.data();
       if (existingData.encounters) {
-        existingEncounters = existingData.encounters;
-        console.log("既存のencountersデータを保持します:", existingEncounters);
+        // 既存のencountersデータがある場合、新しいフィールドを追加
+        existingEncounters = {
+          userIds: existingData.encounters.userIds || [],
+          timestamps: existingData.encounters.timestamps || [],
+          locations: existingData.encounters.locations || [],
+          distances: existingData.encounters.distances || [],
+          usernames: existingData.encounters.usernames || [],
+          oneMessages: existingData.encounters.oneMessages || [],
+          icons: existingData.encounters.icons || [],
+          count: existingData.encounters.count || 0,
+        };
+        console.log(
+          "既存のencountersデータを保持・拡張します:",
+          existingEncounters
+        );
+      }
+      if (existingData.oneMessage) {
+        existingOneMessage = existingData.oneMessage;
+        console.log("既存の一言メッセージを保持します:", existingOneMessage);
       }
     }
 
-    // encountersを保持してドキュメントを更新
+    // encountersと一言メッセージを保持してドキュメントを更新
     const updatedLocationData = {
       ...locationData,
+      oneMessage: existingOneMessage, // 既存の一言メッセージを保持
       encounters: existingEncounters, // 既存のencountersを保持
     };
 
@@ -241,7 +317,7 @@ export const saveLocationToFirestore = async (
       username: `User ${userId}`,
       icon: "https://example.com/images/default.jpg",
       timestamp: new Date(), // 表示用に現在時刻を設定
-      oneMessage: "現在地を共有しました",
+      oneMessage: existingOneMessage, // 保持された一言メッセージ
       coordinates: {
         latitude: location.coords.latitude,
         longitude: location.coords.longitude,
@@ -291,6 +367,9 @@ export const getLatestLocationsFromFirestore = async (
           timestamps: [],
           locations: [],
           distances: [],
+          usernames: [],
+          oneMessages: [],
+          icons: [],
           count: 0,
         },
       });
@@ -335,6 +414,9 @@ export const getUserLocationHistory = async (
             timestamps: [],
             locations: [],
             distances: [],
+            usernames: [],
+            oneMessages: [],
+            icons: [],
             count: 0,
           },
         });
@@ -353,7 +435,7 @@ export const getUserLocationFromFirestore = async (
   userId: string
 ): Promise<Users | null> => {
   try {
-    const documentId = `user_${userId}`;
+    const documentId = generateDocumentId(userId);
     const docRef = doc(db, "users", documentId);
     const docSnap = await getDoc(docRef);
     if (docSnap.exists()) {
@@ -374,6 +456,9 @@ export const getUserLocationFromFirestore = async (
           timestamps: [],
           locations: [],
           distances: [],
+          usernames: [],
+          oneMessages: [],
+          icons: [],
           count: 0,
         },
       };
@@ -407,7 +492,7 @@ export const calculateDistance = (
   return R * c; // 距離（メートル）
 };
 
-// 近くのユーザーを検出してすれ違い情報を記録
+// 近くのユーザーを検出してすれ違い情報を記録（20分間隔制限付き）
 export const detectAndRecordEncounters = async (
   myUserId: string,
   myLocation: { latitude: number; longitude: number },
@@ -422,7 +507,21 @@ export const detectAndRecordEncounters = async (
 
     // 自分以外のユーザーをチェック
     for (const otherUser of allUsers) {
-      if (otherUser.id === myUserId) continue; // 自分自身は除外
+      // 自分自身は除外（複数の条件でチェック）
+      if (
+        otherUser.id === myUserId ||
+        otherUser.id === generateDocumentId(myUserId) ||
+        otherUser.profileID === `${myUserId}profile`
+      ) {
+        continue;
+      }
+
+      // ユーザーIDが同じ場合も除外（user_プレフィックスを除いて比較）
+      const otherUserIdClean = otherUser.id.replace(/^user_/, "");
+      const myUserIdClean = myUserId.replace(/^user_/, "");
+      if (otherUserIdClean === myUserIdClean) {
+        continue;
+      }
 
       // 距離を計算
       const distance = calculateDistance(
@@ -440,15 +539,15 @@ export const detectAndRecordEncounters = async (
           `すれ違い検出: ${otherUser.username} (${distance.toFixed(2)}m)`
         );
 
-        // 重複チェック（過去3時間以内に同じユーザーとのすれ違いがないか）
+        // 重複チェック（過去60分以内に同じユーザーとのすれ違いがないか）
         const isDuplicate = await checkRecentEncounterInUser(
           myUserId,
           otherUser.id,
-          180
+          60
         );
 
         if (!isDuplicate) {
-          // 3時間以内の重複がない場合は記録
+          // 60分以内の重複がない場合は記録
           const encounterLocation = {
             latitude:
               (myLocation.latitude + otherUser.coordinates.latitude) / 2,
@@ -468,17 +567,30 @@ export const detectAndRecordEncounters = async (
 
           detectedEncounters.push(encounterInfo);
 
-          // Usersドキュメントにすれ違い情報を保存
+          // 現在のユーザーの情報を取得
+          const myUserInfo = await getUserLocationFromFirestore(myUserId);
+          const myUsername = myUserInfo?.username || `User ${myUserId}`;
+          const myIcon =
+            myUserInfo?.icon || "https://example.com/images/default.jpg";
+          const myOneMessage = myUserInfo?.oneMessage || "メッセージなし";
+
+          // Usersドキュメントにすれ違い情報を保存（自分側の記録）
           await addEncounterToUser(myUserId, {
             userId: otherUser.id,
+            username: otherUser.username,
+            icon: otherUser.icon,
+            oneMessage: otherUser.oneMessage,
             timestamp: new Date(),
             location: encounterLocation,
             distance: Math.round(distance * 100) / 100,
           });
 
-          // 相手のユーザーにも記録
+          // 相手のユーザーにも記録（相手側の記録）
           await addEncounterToUser(otherUser.id, {
             userId: myUserId,
+            username: myUsername,
+            icon: myIcon,
+            oneMessage: myOneMessage,
             timestamp: new Date(),
             location: encounterLocation,
             distance: Math.round(distance * 100) / 100,
@@ -487,7 +599,7 @@ export const detectAndRecordEncounters = async (
           console.log(`新規すれ違いを記録: ${otherUser.username}`);
         } else {
           console.log(
-            `重複スキップ: ${otherUser.username} (3時間以内に記録済み)`
+            `重複スキップ: ${otherUser.username} (20分以内に記録済み)`
           );
         }
       }
@@ -507,7 +619,15 @@ const addEncounterToUser = async (
   encounterRecord: EncounterRecord
 ): Promise<void> => {
   try {
-    const documentId = `user_${userId}`;
+    // 自分自身とのすれ違いは記録しない
+    const userIdClean = userId.replace(/^user_/, "");
+    const encounterUserIdClean = encounterRecord.userId.replace(/^user_/, "");
+    if (userIdClean === encounterUserIdClean) {
+      console.log(`自分自身とのすれ違いをスキップ: ${userId}`);
+      return;
+    }
+
+    const documentId = generateDocumentId(userId);
     const docRef = doc(db, "users", documentId);
     const docSnap = await getDoc(docRef);
 
@@ -518,14 +638,20 @@ const addEncounterToUser = async (
         timestamps: [],
         locations: [],
         distances: [],
+        usernames: [],
+        oneMessages: [],
+        icons: [],
         count: 0,
       };
 
-      // 新しいすれ違い情報を追加
+      // 新しいすれ違い情報を追加（すれ違った時点での相手の情報を保存）
       currentEncounters.userIds.push(encounterRecord.userId);
       currentEncounters.timestamps.push(encounterRecord.timestamp);
       currentEncounters.locations.push(encounterRecord.location);
       currentEncounters.distances.push(encounterRecord.distance);
+      currentEncounters.usernames.push(encounterRecord.username);
+      currentEncounters.oneMessages.push(encounterRecord.oneMessage);
+      currentEncounters.icons.push(encounterRecord.icon);
       currentEncounters.count += 1;
 
       // ドキュメントを更新
@@ -536,26 +662,60 @@ const addEncounterToUser = async (
 
       console.log(`ユーザー ${userId} のすれ違い情報を更新しました`);
     } else {
-      console.error(`ユーザー ${userId} が見つかりません`);
+      // ユーザーが存在しない場合は新規作成
+      console.log(`ユーザー ${userId} が存在しないため、新規作成します`);
+
+      const newUserData = {
+        userId: userId,
+        username: `User-${userId.slice(-6)}`,
+        oneMessage: "",
+        encounters: {
+          userIds: [encounterRecord.userId],
+          timestamps: [encounterRecord.timestamp],
+          locations: [encounterRecord.location],
+          distances: [encounterRecord.distance],
+          usernames: [encounterRecord.username],
+          oneMessages: [encounterRecord.oneMessage],
+          icons: [encounterRecord.icon],
+          count: 1,
+        },
+        createdAt: new Date(),
+        lastUpdated: new Date(),
+      };
+
+      await setDoc(docRef, newUserData);
+      console.log(
+        `ユーザー ${userId} を新規作成し、すれ違い情報を追加しました`
+      );
     }
   } catch (error) {
     console.error("ユーザーのすれ違い情報追加エラー:", error);
   }
 };
 
-// Usersドキュメント内で最近のすれ違い記録をチェック（重複防止）
+// Usersドキュメント内で最近のすれ違い記録をチェック（重複防止、20分間隔）
 const checkRecentEncounterInUser = async (
   myUserId: string,
   otherUserId: string,
   withinMinutes: number
 ): Promise<boolean> => {
   try {
+    // 自分自身とのすれ違いチェックは常にtrueを返す
+    const myUserIdClean = myUserId.replace(/^user_/, "");
+    const otherUserIdClean = otherUserId.replace(/^user_/, "");
+    if (myUserIdClean === otherUserIdClean) {
+      console.log(
+        `自分自身とのすれ違いチェック: ${myUserId} === ${otherUserId}`
+      );
+      return true; // 重複として扱う
+    }
+
     const cutoffTime = new Date(Date.now() - withinMinutes * 60 * 1000);
     console.log(
-      `重複チェック開始: ${myUserId} vs ${otherUserId}, カットオフ時間: ${cutoffTime.toISOString()}`
+      `重複チェック開始: ${myUserId} vs ${otherUserId}, カットオフ時間: ${cutoffTime.toISOString()} (${withinMinutes}分以内)`
     );
 
-    const documentId = `user_${myUserId}`;
+    const documentId = generateDocumentId(myUserId);
     const docRef = doc(db, "users", documentId);
     const docSnap = await getDoc(docRef);
 
@@ -613,6 +773,9 @@ export const usersdata: Users[] = [
       timestamps: [],
       locations: [],
       distances: [],
+      usernames: [],
+      oneMessages: [],
+      icons: [],
       count: 0,
     },
   },
@@ -632,6 +795,9 @@ export const usersdata: Users[] = [
       timestamps: [],
       locations: [],
       distances: [],
+      usernames: [],
+      oneMessages: [],
+      icons: [],
       count: 0,
     },
   },
@@ -651,6 +817,9 @@ export const usersdata: Users[] = [
       timestamps: [],
       locations: [],
       distances: [],
+      usernames: [],
+      oneMessages: [],
+      icons: [],
       count: 0,
     },
   },
@@ -670,6 +839,9 @@ export const usersdata: Users[] = [
       timestamps: [],
       locations: [],
       distances: [],
+      usernames: [],
+      oneMessages: [],
+      icons: [],
       count: 0,
     },
   },
@@ -689,6 +861,9 @@ export const usersdata: Users[] = [
       timestamps: [],
       locations: [],
       distances: [],
+      usernames: [],
+      oneMessages: [],
+      icons: [],
       count: 0,
     },
   },
@@ -700,12 +875,14 @@ export const getUserEncounters = async (
   limitCount: number = 50
 ): Promise<EncounterWithUserInfo[]> => {
   try {
-    const documentId = `user_${userId}`;
+    const documentId = generateDocumentId(userId);
     const docRef = doc(db, "users", documentId);
     const docSnap = await getDoc(docRef);
 
     if (!docSnap.exists()) {
-      console.log(`ユーザー ${userId} が見つかりません`);
+      console.log(
+        `ユーザー ${userId} のドキュメントが存在しません（初回起動または新規ユーザー）`
+      );
       return [];
     }
 
@@ -727,20 +904,34 @@ export const getUserEncounters = async (
     for (let i = totalCount - 1; i >= startIndex; i--) {
       const otherUserId = encounters.userIds[i];
 
-      // 相手のユーザー情報を取得
-      const otherUserDoc = await getDoc(
-        doc(db, "users", `user_${otherUserId}`)
-      );
+      // 保存された履歴情報を使用（すれ違った時点での情報）
       let otherUsername = "Unknown User";
       let otherIcon = "https://example.com/images/default.jpg";
       let otherOneMessage = "";
 
-      if (otherUserDoc.exists()) {
-        const otherUserData = otherUserDoc.data();
-        otherUsername = otherUserData.username || "Unknown User";
-        otherIcon =
-          otherUserData.icon || "https://example.com/images/default.jpg";
-        otherOneMessage = otherUserData.oneMessage || "";
+      // 新しいフィールドが存在する場合は履歴から取得
+      if (encounters.usernames && encounters.usernames[i]) {
+        otherUsername = encounters.usernames[i];
+      }
+      if (encounters.icons && encounters.icons[i]) {
+        otherIcon = encounters.icons[i];
+      }
+      if (encounters.oneMessages && encounters.oneMessages[i]) {
+        otherOneMessage = encounters.oneMessages[i];
+      }
+
+      // 新しいフィールドが存在しない場合は現在の情報を取得（後方互換性）
+      if (!encounters.usernames || !encounters.usernames[i]) {
+        const otherUserDoc = await getDoc(
+          doc(db, "users", generateDocumentId(otherUserId))
+        );
+        if (otherUserDoc.exists()) {
+          const otherUserData = otherUserDoc.data();
+          otherUsername = otherUserData.username || "Unknown User";
+          otherIcon =
+            otherUserData.icon || "https://example.com/images/default.jpg";
+          otherOneMessage = otherUserData.oneMessage || "";
+        }
       }
 
       encounterList.push({
@@ -1009,5 +1200,295 @@ export const getEncounterSummary = async (
       totalCount: 0,
       uniqueUsersCount: 0,
     };
+  }
+};
+
+// ==============================================
+// プロフィール管理関数群
+// ==============================================
+
+// プロフィール情報を保存・更新
+export const saveUserProfile = async (
+  userId: string,
+  profileData: UserProfileUpdateData
+): Promise<boolean> => {
+  try {
+    // プロフィール用のドキュメントIDを生成
+    const profileDocumentId = generateDocumentId(userId);
+    const docRef = doc(db, "profiles", profileDocumentId);
+
+    // undefinedフィールドを除外するヘルパー関数
+    const removeUndefinedFields = (obj: any) => {
+      const result: any = {};
+      Object.keys(obj).forEach((key) => {
+        if (obj[key] !== undefined && obj[key] !== null) {
+          result[key] = obj[key];
+        }
+      });
+      return result;
+    };
+
+    // 既存のプロフィールを取得
+    const docSnap = await getDoc(docRef);
+
+    if (docSnap.exists()) {
+      // 既存のプロフィールを更新
+      const existingData = docSnap.data();
+      const cleanedProfileData = removeUndefinedFields(profileData);
+      const updatedData = {
+        ...existingData,
+        ...cleanedProfileData,
+        updatedAt: serverTimestamp(),
+      };
+
+      await setDoc(docRef, updatedData);
+      console.log(`ユーザー ${userId} のプロフィールを更新しました`);
+      return true;
+    } else {
+      // 新規プロフィールを作成
+      const cleanedProfileData = removeUndefinedFields(profileData);
+
+      const baseProfileData: any = {
+        userId: userId,
+        profileID: `${userId}profile`,
+        gender: cleanedProfileData.gender || "",
+        bloodType: cleanedProfileData.bloodType || "",
+        hometown: cleanedProfileData.hometown || "",
+        worries: cleanedProfileData.worries || "",
+        selfIntroduction: cleanedProfileData.selfIntroduction || "",
+        tags: cleanedProfileData.tags || [],
+      };
+
+      // birthdayが有効な場合のみ追加
+      if (
+        cleanedProfileData.birthday &&
+        cleanedProfileData.birthday instanceof Date &&
+        !isNaN(cleanedProfileData.birthday.getTime())
+      ) {
+        baseProfileData.birthday = cleanedProfileData.birthday;
+      }
+
+      const newProfile = {
+        ...baseProfileData,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      };
+
+      await setDoc(docRef, newProfile);
+      console.log(`ユーザー ${userId} の新規プロフィールを作成しました`);
+      return true;
+    }
+  } catch (error) {
+    console.error("プロフィールの保存に失敗しました:", error);
+    return false;
+  }
+};
+
+// プロフィール情報を取得
+export const getUserProfile = async (
+  userId: string
+): Promise<UserProfile | null> => {
+  try {
+    const profileDocumentId = generateDocumentId(userId);
+    const docRef = doc(db, "profiles", profileDocumentId);
+    const docSnap = await getDoc(docRef);
+
+    if (docSnap.exists()) {
+      const data = docSnap.data();
+      return {
+        id: docSnap.id,
+        userId: data.userId || userId,
+        profileID: data.profileID || `${userId}profile`,
+        gender: data.gender || "",
+        bloodType: data.bloodType || "",
+        hometown: data.hometown || "",
+        birthday: data.birthday?.toDate?.() || undefined,
+        worries: data.worries || "",
+        selfIntroduction: data.selfIntroduction || "",
+        tags: data.tags || [],
+        createdAt: data.createdAt?.toDate?.() || new Date(),
+        updatedAt: data.updatedAt?.toDate?.() || new Date(),
+      };
+    } else {
+      console.log(`ユーザー ${userId} のプロフィールが見つかりません`);
+      return null;
+    }
+  } catch (error) {
+    console.error("プロフィールの取得に失敗しました:", error);
+    return null;
+  }
+};
+
+// プロフィール情報を削除
+export const deleteUserProfile = async (userId: string): Promise<boolean> => {
+  try {
+    const profileDocumentId = generateDocumentId(userId);
+    const docRef = doc(db, "profiles", profileDocumentId);
+
+    await setDoc(
+      docRef,
+      {
+        deleted: true,
+        deletedAt: serverTimestamp(),
+      },
+      { merge: true }
+    );
+
+    console.log(`ユーザー ${userId} のプロフィールを削除しました`);
+    return true;
+  } catch (error) {
+    console.error("プロフィールの削除に失敗しました:", error);
+    return false;
+  }
+};
+
+// 複数のプロフィールを取得（検索・一覧表示用）
+export const getMultipleUserProfiles = async (
+  userIds: string[]
+): Promise<{ [userId: string]: UserProfile }> => {
+  try {
+    const profiles: { [userId: string]: UserProfile } = {};
+
+    // 並列処理でプロフィールを取得
+    const profilePromises = userIds.map(async (userId) => {
+      const profile = await getUserProfile(userId);
+      if (profile) {
+        profiles[userId] = profile;
+      }
+    });
+
+    await Promise.all(profilePromises);
+    return profiles;
+  } catch (error) {
+    console.error("複数プロフィールの取得に失敗しました:", error);
+    return {};
+  }
+};
+
+// タグによるプロフィール検索
+export const searchProfilesByTag = async (
+  tag: string,
+  limitCount: number = 20
+): Promise<UserProfile[]> => {
+  try {
+    const q = query(collection(db, "profiles"), limit(limitCount));
+
+    const querySnapshot = await getDocs(q);
+    const profiles: UserProfile[] = [];
+
+    querySnapshot.forEach((doc) => {
+      const data = doc.data();
+      // タグにマッチするプロフィールのみ追加
+      if (data.tags && Array.isArray(data.tags) && data.tags.includes(tag)) {
+        profiles.push({
+          id: doc.id,
+          userId: data.userId || "",
+          profileID: data.profileID || "",
+          gender: data.gender || "",
+          bloodType: data.bloodType || "",
+          hometown: data.hometown || "",
+          birthday: data.birthday?.toDate?.() || undefined,
+          worries: data.worries || "",
+          selfIntroduction: data.selfIntroduction || "",
+          tags: data.tags || [],
+          createdAt: data.createdAt?.toDate?.() || new Date(),
+          updatedAt: data.updatedAt?.toDate?.() || new Date(),
+        });
+      }
+    });
+
+    return profiles;
+  } catch (error) {
+    console.error("タグによるプロフィール検索に失敗しました:", error);
+    return [];
+  }
+};
+
+// 出身地によるプロフィール検索
+export const searchProfilesByHometown = async (
+  hometown: string,
+  limitCount: number = 20
+): Promise<UserProfile[]> => {
+  try {
+    const q = query(collection(db, "profiles"), limit(limitCount));
+
+    const querySnapshot = await getDocs(q);
+    const profiles: UserProfile[] = [];
+
+    querySnapshot.forEach((doc) => {
+      const data = doc.data();
+      // 出身地にマッチするプロフィールのみ追加
+      if (data.hometown && data.hometown.includes(hometown)) {
+        profiles.push({
+          id: doc.id,
+          userId: data.userId || "",
+          profileID: data.profileID || "",
+          gender: data.gender || "",
+          bloodType: data.bloodType || "",
+          hometown: data.hometown || "",
+          birthday: data.birthday?.toDate?.() || undefined,
+          worries: data.worries || "",
+          selfIntroduction: data.selfIntroduction || "",
+          tags: data.tags || [],
+          createdAt: data.createdAt?.toDate?.() || new Date(),
+          updatedAt: data.updatedAt?.toDate?.() || new Date(),
+        });
+      }
+    });
+
+    return profiles;
+  } catch (error) {
+    console.error("出身地によるプロフィール検索に失敗しました:", error);
+    return [];
+  }
+};
+
+// ==============================================
+// 一言メッセージ管理関数群
+// ==============================================
+
+// 一言メッセージを取得
+export const getUserOneMessage = async (userId: string): Promise<string> => {
+  try {
+    const documentId = generateDocumentId(userId);
+    const docRef = doc(db, "users", documentId);
+    const docSnap = await getDoc(docRef);
+
+    if (docSnap.exists()) {
+      const data = docSnap.data();
+      return data.oneMessage || "";
+    } else {
+      console.log(`ユーザー ${userId} の一言メッセージが見つかりません`);
+      return "";
+    }
+  } catch (error) {
+    console.error("一言メッセージの取得に失敗しました:", error);
+    return "";
+  }
+};
+
+// 一言メッセージを更新
+export const updateUserOneMessage = async (
+  userId: string,
+  oneMessage: string
+): Promise<boolean> => {
+  try {
+    const documentId = generateDocumentId(userId);
+    const docRef = doc(db, "users", documentId);
+
+    await setDoc(
+      docRef,
+      {
+        oneMessage: oneMessage,
+        updatedAt: serverTimestamp(),
+      },
+      { merge: true }
+    );
+
+    console.log(`ユーザー ${userId} の一言メッセージを更新しました`);
+    return true;
+  } catch (error) {
+    console.error("一言メッセージの更新に失敗しました:", error);
+    return false;
   }
 };

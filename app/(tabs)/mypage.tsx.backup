@@ -1,0 +1,1089 @@
+import { Ionicons } from "@expo/vector-icons";
+import React, { useEffect, useState } from "react";
+import {
+  Alert,
+  ScrollView,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { styles } from "../../components/utils/styles";
+import {
+  UserProfile,
+  UserProfileUpdateData,
+} from "../../components/utils/types";
+import {
+  getEncounterHistory,
+  getUserOneMessage,
+  getUserProfile,
+  saveUserProfile,
+  updateUserOneMessage,
+} from "../../services/locationService";
+import { getPersistentUserId } from "../../services/userService";
+
+export default function MyPageScreen() {
+  const [currentUserId, setCurrentUserId] = useState<string>("");
+  const [currentOneMessage, setCurrentOneMessage] = useState<string>("");
+  const [editingOneMessage, setEditingOneMessage] = useState<string>("");
+  const [isEditingMessage, setIsEditingMessage] = useState(false);
+  const [savingMessage, setSavingMessage] = useState(false);
+
+  // プロフィール用のstate
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+  const [profileFormData, setProfileFormData] = useState<UserProfileUpdateData>(
+    {
+      gender: "",
+      bloodType: "",
+      hometown: "",
+      birthday: undefined,
+      worries: "",
+      selfIntroduction: "",
+      tags: [],
+    }
+  );
+  const [isEditingProfile, setIsEditingProfile] = useState(false);
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [profileTabIndex, setProfileTabIndex] = useState(0); // 0: 基本情報, 1: 詳細情報
+  const [tagInput, setTagInput] = useState("");
+
+  // すれ違い履歴用のstate
+  const [encounterHistory, setEncounterHistory] = useState<any[]>([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
+
+  useEffect(() => {
+    const initializeData = async () => {
+      const userId = await getPersistentUserId();
+      setCurrentUserId(userId);
+
+      // 一言メッセージを取得
+      try {
+        const oneMessage = await getUserOneMessage(userId);
+        setCurrentOneMessage(oneMessage);
+        setEditingOneMessage(oneMessage);
+      } catch (error) {
+        console.error("一言メッセージの取得に失敗しました:", error);
+        setCurrentOneMessage("");
+        setEditingOneMessage("");
+      }
+
+      // プロフィール情報を読み込み
+      await loadUserProfile(userId);
+
+      // すれ違い履歴を取得
+      await fetchEncounterHistory(userId);
+    };
+
+    initializeData();
+  }, []);
+
+  // 一言メッセージの編集を開始
+  const startEditingMessage = () => {
+    setIsEditingMessage(true);
+  };
+
+  // 一言メッセージの保存
+  const saveOneMessage = async () => {
+    if (editingOneMessage.trim().length === 0) {
+      Alert.alert("エラー", "メッセージを入力してください");
+      return;
+    }
+
+    setSavingMessage(true);
+    try {
+      const success = await updateUserOneMessage(
+        currentUserId,
+        editingOneMessage.trim()
+      );
+      if (success) {
+        setCurrentOneMessage(editingOneMessage.trim());
+        setIsEditingMessage(false);
+        Alert.alert("成功", "一言メッセージを更新しました");
+      } else {
+        Alert.alert("エラー", "メッセージの更新に失敗しました");
+      }
+    } catch (error) {
+      console.error("一言メッセージの保存に失敗しました:", error);
+      Alert.alert("エラー", "メッセージの更新に失敗しました");
+    } finally {
+      setSavingMessage(false);
+    }
+  };
+
+  // 一言メッセージの編集をキャンセル
+  const cancelEditingMessage = () => {
+    setEditingOneMessage(currentOneMessage);
+    setIsEditingMessage(false);
+  };
+
+  // プロフィール情報を読み込む
+  const loadUserProfile = async (userId: string) => {
+    if (!userId) return;
+
+    try {
+      const profile = await getUserProfile(userId);
+      if (profile) {
+        setUserProfile(profile);
+        setProfileFormData({
+          gender: profile.gender || "",
+          bloodType: profile.bloodType || "",
+          hometown: profile.hometown || "",
+          birthday: profile.birthday || undefined,
+          worries: profile.worries || "",
+          selfIntroduction: profile.selfIntroduction || "",
+          tags: profile.tags || [],
+        });
+      }
+    } catch (error) {
+      console.error("プロフィールの読み込みに失敗しました:", error);
+    }
+  };
+
+  // プロフィール情報を保存
+  const saveUserProfileData = async () => {
+    if (!currentUserId) return;
+
+    setSavingProfile(true);
+    try {
+      // プロフィールデータをクリーンアップ
+      const cleanedProfileData = { ...profileFormData };
+
+      // 誕生日が無効な場合は除去
+      if (
+        cleanedProfileData.birthday &&
+        (!(cleanedProfileData.birthday instanceof Date) ||
+          isNaN(cleanedProfileData.birthday.getTime()))
+      ) {
+        cleanedProfileData.birthday = undefined;
+      }
+
+      const success = await saveUserProfile(currentUserId, cleanedProfileData);
+      if (success) {
+        await loadUserProfile(currentUserId); // 最新情報を再読み込み
+        setIsEditingProfile(false);
+        Alert.alert("成功", "プロフィールを更新しました");
+      } else {
+        Alert.alert("エラー", "プロフィールの更新に失敗しました");
+      }
+    } catch (error) {
+      console.error("プロフィールの保存に失敗しました:", error);
+      Alert.alert("エラー", "プロフィールの更新に失敗しました");
+    } finally {
+      setSavingProfile(false);
+    }
+  };
+
+  // プロフィール編集をキャンセル
+  const cancelEditingProfile = () => {
+    if (userProfile) {
+      setProfileFormData({
+        gender: userProfile.gender || "",
+        bloodType: userProfile.bloodType || "",
+        hometown: userProfile.hometown || "",
+        birthday: userProfile.birthday || undefined,
+        worries: userProfile.worries || "",
+        selfIntroduction: userProfile.selfIntroduction || "",
+        tags: userProfile.tags || [],
+      });
+    }
+    setIsEditingProfile(false);
+  };
+
+  // タグを追加
+  const addTag = () => {
+    if (tagInput.trim() && !profileFormData.tags?.includes(tagInput.trim())) {
+      setProfileFormData({
+        ...profileFormData,
+        tags: [...(profileFormData.tags || []), tagInput.trim()],
+      });
+      setTagInput("");
+    }
+  };
+
+  // タグを削除
+  const removeTag = (tagToRemove: string) => {
+    setProfileFormData({
+      ...profileFormData,
+      tags: profileFormData.tags?.filter((tag) => tag !== tagToRemove) || [],
+    });
+  };
+
+  // すれ違い履歴を取得する関数
+  const fetchEncounterHistory = async (userId: string) => {
+    if (!userId) return;
+
+    setLoadingHistory(true);
+    try {
+      console.log("すれ違い履歴を取得中...");
+      const history = await getEncounterHistory(userId);
+      setEncounterHistory(history);
+      console.log(`すれ違い履歴を${history.length}件取得しました`);
+    } catch (error) {
+      console.error("すれ違い履歴取得エラー:", error);
+      Alert.alert("エラー", "すれ違い履歴の取得に失敗しました");
+    } finally {
+      setLoadingHistory(false);
+    }
+  };
+
+  return (
+    <SafeAreaView style={styles.container}>
+      <ScrollView style={styles.modalBody}>
+        {/* ユーザー情報セクション */}
+        <View style={{ alignItems: "center", padding: 20 }}>
+          <Ionicons name="person-circle" size={80} color="#007AFF" />
+          <Text
+            style={{
+              fontSize: 20,
+              fontWeight: "bold",
+              marginTop: 10,
+              marginBottom: 5,
+            }}
+          >
+            {currentUserId ? `User-${currentUserId.slice(-6)}` : "ユーザー"}
+          </Text>
+          <Text style={{ fontSize: 14, color: "#666", marginBottom: 20 }}>
+            ID: {currentUserId ? currentUserId.slice(-8) : "未設定"}
+          </Text>
+        </View>
+
+        {/* アカウント情報セクション */}
+        <View
+          style={{
+            backgroundColor: "#f8f9fa",
+            padding: 15,
+            marginBottom: 15,
+            borderRadius: 10,
+            borderWidth: 1,
+            borderColor: "#e9ecef",
+            marginHorizontal: 15,
+          }}
+        >
+          <Text style={{ fontSize: 16, fontWeight: "bold", marginBottom: 10 }}>
+            アカウント情報
+          </Text>
+          <View
+            style={{
+              flexDirection: "row",
+              justifyContent: "space-between",
+              marginBottom: 8,
+            }}
+          >
+            <Text style={{ color: "#666" }}>ユーザーID</Text>
+            <Text>{currentUserId ? currentUserId.slice(-10) : "未設定"}</Text>
+          </View>
+          <View
+            style={{
+              flexDirection: "row",
+              justifyContent: "space-between",
+              marginBottom: 8,
+            }}
+          >
+            <Text style={{ color: "#666" }}>表示名</Text>
+            <Text>
+              {currentUserId ? `User-${currentUserId.slice(-6)}` : "未設定"}
+            </Text>
+          </View>
+        </View>
+
+        {/* 一言メッセージ編集セクション */}
+        <View
+          style={{
+            backgroundColor: "#f8f9fa",
+            padding: 15,
+            marginBottom: 15,
+            borderRadius: 10,
+            borderWidth: 1,
+            borderColor: "#e9ecef",
+            marginHorizontal: 15,
+          }}
+        >
+          <View
+            style={{
+              flexDirection: "row",
+              justifyContent: "space-between",
+              alignItems: "center",
+              marginBottom: 10,
+            }}
+          >
+            <Text style={{ fontSize: 16, fontWeight: "bold" }}>
+              一言メッセージ
+            </Text>
+            {!isEditingMessage && (
+              <TouchableOpacity
+                style={{
+                  backgroundColor: "#007AFF",
+                  paddingHorizontal: 12,
+                  paddingVertical: 6,
+                  borderRadius: 15,
+                }}
+                onPress={startEditingMessage}
+              >
+                <Text style={{ color: "white", fontSize: 12 }}>編集</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+
+          {isEditingMessage ? (
+            <View>
+              <TextInput
+                style={{
+                  borderWidth: 1,
+                  borderColor: "#ddd",
+                  borderRadius: 8,
+                  padding: 10,
+                  marginBottom: 10,
+                  backgroundColor: "white",
+                  fontSize: 14,
+                  maxHeight: 80,
+                }}
+                value={editingOneMessage}
+                onChangeText={setEditingOneMessage}
+                placeholder="一言メッセージを入力..."
+                multiline
+                maxLength={100}
+              />
+              <View
+                style={{
+                  flexDirection: "row",
+                  justifyContent: "space-between",
+                }}
+              >
+                <TouchableOpacity
+                  style={{
+                    backgroundColor: "#6c757d",
+                    paddingHorizontal: 15,
+                    paddingVertical: 8,
+                    borderRadius: 5,
+                    flex: 1,
+                    marginRight: 5,
+                  }}
+                  onPress={cancelEditingMessage}
+                >
+                  <Text
+                    style={{
+                      color: "white",
+                      textAlign: "center",
+                      fontSize: 14,
+                    }}
+                  >
+                    キャンセル
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={{
+                    backgroundColor: savingMessage ? "#ccc" : "#28a745",
+                    paddingHorizontal: 15,
+                    paddingVertical: 8,
+                    borderRadius: 5,
+                    flex: 1,
+                    marginLeft: 5,
+                  }}
+                  onPress={saveOneMessage}
+                  disabled={savingMessage}
+                >
+                  <Text
+                    style={{
+                      color: "white",
+                      textAlign: "center",
+                      fontSize: 14,
+                    }}
+                  >
+                    {savingMessage ? "保存中..." : "保存"}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          ) : (
+            <View
+              style={{
+                backgroundColor: "white",
+                padding: 12,
+                borderRadius: 8,
+                borderWidth: 1,
+                borderColor: "#ddd",
+                minHeight: 50,
+              }}
+            >
+              <Text
+                style={{
+                  fontSize: 14,
+                  color: currentOneMessage ? "#333" : "#999",
+                  fontStyle: currentOneMessage ? "normal" : "italic",
+                }}
+              >
+                {currentOneMessage || "一言メッセージが設定されていません"}
+              </Text>
+            </View>
+          )}
+        </View>
+
+        {/* プロフィール編集セクション */}
+        <View
+          style={{
+            backgroundColor: "#f8f9fa",
+            padding: 15,
+            marginBottom: 15,
+            borderRadius: 10,
+            borderWidth: 1,
+            borderColor: "#e9ecef",
+            marginHorizontal: 15,
+          }}
+        >
+          <View
+            style={{
+              flexDirection: "row",
+              justifyContent: "space-between",
+              alignItems: "center",
+              marginBottom: 10,
+            }}
+          >
+            <Text style={{ fontSize: 16, fontWeight: "bold" }}>
+              プロフィール情報
+            </Text>
+            {!isEditingProfile && (
+              <TouchableOpacity
+                style={{
+                  backgroundColor: "#007AFF",
+                  paddingHorizontal: 12,
+                  paddingVertical: 6,
+                  borderRadius: 15,
+                }}
+                onPress={() => setIsEditingProfile(true)}
+              >
+                <Text style={{ color: "white", fontSize: 12 }}>編集</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+
+          {/* タブナビゲーション */}
+          <View style={{ flexDirection: "row", marginBottom: 15 }}>
+            <TouchableOpacity
+              style={[
+                {
+                  flex: 1,
+                  padding: 10,
+                  alignItems: "center",
+                  borderRadius: 8,
+                },
+                profileTabIndex === 0 && { backgroundColor: "#007AFF" },
+              ]}
+              onPress={() => setProfileTabIndex(0)}
+            >
+              <Text
+                style={{
+                  color: profileTabIndex === 0 ? "white" : "#666",
+                }}
+              >
+                基本情報
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                {
+                  flex: 1,
+                  padding: 10,
+                  alignItems: "center",
+                  borderRadius: 8,
+                },
+                profileTabIndex === 1 && { backgroundColor: "#007AFF" },
+              ]}
+              onPress={() => setProfileTabIndex(1)}
+            >
+              <Text
+                style={{
+                  color: profileTabIndex === 1 ? "white" : "#666",
+                }}
+              >
+                詳細情報
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* 基本情報タブ */}
+          {profileTabIndex === 0 && (
+            <View>
+              {/* 性別 */}
+              <View style={{ marginBottom: 15 }}>
+                <Text
+                  style={{
+                    fontSize: 14,
+                    fontWeight: "bold",
+                    marginBottom: 5,
+                  }}
+                >
+                  性別
+                </Text>
+                {isEditingProfile ? (
+                  <View style={{ flexDirection: "row", flexWrap: "wrap" }}>
+                    {["男性", "女性", "その他", "非公開"].map((gender) => (
+                      <TouchableOpacity
+                        key={gender}
+                        style={[
+                          {
+                            paddingHorizontal: 12,
+                            paddingVertical: 8,
+                            margin: 4,
+                            borderRadius: 20,
+                            backgroundColor:
+                              profileFormData.gender === gender
+                                ? "#007AFF"
+                                : "#e9ecef",
+                          },
+                        ]}
+                        onPress={() =>
+                          setProfileFormData({
+                            ...profileFormData,
+                            gender,
+                          })
+                        }
+                      >
+                        <Text
+                          style={{
+                            color:
+                              profileFormData.gender === gender
+                                ? "white"
+                                : "#666",
+                          }}
+                        >
+                          {gender}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                ) : (
+                  <Text style={{ fontSize: 14, color: "#333" }}>
+                    {profileFormData.gender || "未設定"}
+                  </Text>
+                )}
+              </View>
+
+              {/* 血液型 */}
+              <View style={{ marginBottom: 15 }}>
+                <Text
+                  style={{
+                    fontSize: 14,
+                    fontWeight: "bold",
+                    marginBottom: 5,
+                  }}
+                >
+                  血液型
+                </Text>
+                {isEditingProfile ? (
+                  <View style={{ flexDirection: "row", flexWrap: "wrap" }}>
+                    {["A型", "B型", "O型", "AB型", "不明"].map((bloodType) => (
+                      <TouchableOpacity
+                        key={bloodType}
+                        style={[
+                          {
+                            paddingHorizontal: 12,
+                            paddingVertical: 8,
+                            margin: 4,
+                            borderRadius: 20,
+                            backgroundColor:
+                              profileFormData.bloodType === bloodType
+                                ? "#007AFF"
+                                : "#e9ecef",
+                          },
+                        ]}
+                        onPress={() =>
+                          setProfileFormData({
+                            ...profileFormData,
+                            bloodType,
+                          })
+                        }
+                      >
+                        <Text
+                          style={{
+                            color:
+                              profileFormData.bloodType === bloodType
+                                ? "white"
+                                : "#666",
+                          }}
+                        >
+                          {bloodType}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                ) : (
+                  <Text style={{ fontSize: 14, color: "#333" }}>
+                    {profileFormData.bloodType || "未設定"}
+                  </Text>
+                )}
+              </View>
+
+              {/* 出身地 */}
+              <View style={{ marginBottom: 15 }}>
+                <Text
+                  style={{
+                    fontSize: 14,
+                    fontWeight: "bold",
+                    marginBottom: 5,
+                  }}
+                >
+                  出身地
+                </Text>
+                {isEditingProfile ? (
+                  <TextInput
+                    style={{
+                      borderWidth: 1,
+                      borderColor: "#ddd",
+                      borderRadius: 8,
+                      padding: 10,
+                      backgroundColor: "white",
+                      fontSize: 14,
+                    }}
+                    value={profileFormData.hometown}
+                    onChangeText={(text) =>
+                      setProfileFormData({
+                        ...profileFormData,
+                        hometown: text,
+                      })
+                    }
+                    placeholder="出身地を入力..."
+                    maxLength={50}
+                  />
+                ) : (
+                  <Text style={{ fontSize: 14, color: "#333" }}>
+                    {profileFormData.hometown || "未設定"}
+                  </Text>
+                )}
+              </View>
+
+              {/* 誕生日 */}
+              <View style={{ marginBottom: 15 }}>
+                <Text
+                  style={{
+                    fontSize: 14,
+                    fontWeight: "bold",
+                    marginBottom: 5,
+                  }}
+                >
+                  誕生日
+                </Text>
+                {isEditingProfile ? (
+                  <TextInput
+                    style={{
+                      borderWidth: 1,
+                      borderColor: "#ddd",
+                      borderRadius: 8,
+                      padding: 10,
+                      backgroundColor: "white",
+                      fontSize: 14,
+                    }}
+                    value={
+                      profileFormData.birthday
+                        ? profileFormData.birthday.toISOString().split("T")[0]
+                        : ""
+                    }
+                    onChangeText={(text) => {
+                      // YYYY-MM-DD形式の文字列をDateオブジェクトに変換
+                      if (text && text.match(/^\d{4}-\d{2}-\d{2}$/)) {
+                        const date = new Date(text);
+                        // 有効な日付かどうかチェック
+                        if (!isNaN(date.getTime())) {
+                          setProfileFormData({
+                            ...profileFormData,
+                            birthday: date,
+                          });
+                        }
+                      } else if (!text) {
+                        setProfileFormData({
+                          ...profileFormData,
+                          birthday: undefined,
+                        });
+                      }
+                    }}
+                    placeholder="YYYY-MM-DD（例: 1990-01-01）"
+                    maxLength={10}
+                  />
+                ) : (
+                  <Text style={{ fontSize: 14, color: "#333" }}>
+                    {profileFormData.birthday
+                      ? profileFormData.birthday.toLocaleDateString("ja-JP")
+                      : "未設定"}
+                  </Text>
+                )}
+              </View>
+            </View>
+          )}
+
+          {/* 詳細情報タブ */}
+          {profileTabIndex === 1 && (
+            <View>
+              {/* 悩み */}
+              <View style={{ marginBottom: 15 }}>
+                <Text
+                  style={{
+                    fontSize: 14,
+                    fontWeight: "bold",
+                    marginBottom: 5,
+                  }}
+                >
+                  悩み・相談したいこと
+                </Text>
+                {isEditingProfile ? (
+                  <TextInput
+                    style={{
+                      borderWidth: 1,
+                      borderColor: "#ddd",
+                      borderRadius: 8,
+                      padding: 10,
+                      backgroundColor: "white",
+                      fontSize: 14,
+                      minHeight: 60,
+                    }}
+                    value={profileFormData.worries}
+                    onChangeText={(text) =>
+                      setProfileFormData({
+                        ...profileFormData,
+                        worries: text,
+                      })
+                    }
+                    placeholder="悩みや相談したいことを入力..."
+                    multiline
+                    maxLength={200}
+                  />
+                ) : (
+                  <Text style={{ fontSize: 14, color: "#333" }}>
+                    {profileFormData.worries || "未設定"}
+                  </Text>
+                )}
+              </View>
+
+              {/* 自己紹介 */}
+              <View style={{ marginBottom: 15 }}>
+                <Text
+                  style={{
+                    fontSize: 14,
+                    fontWeight: "bold",
+                    marginBottom: 5,
+                  }}
+                >
+                  自己紹介
+                </Text>
+                {isEditingProfile ? (
+                  <TextInput
+                    style={{
+                      borderWidth: 1,
+                      borderColor: "#ddd",
+                      borderRadius: 8,
+                      padding: 10,
+                      backgroundColor: "white",
+                      fontSize: 14,
+                      minHeight: 80,
+                    }}
+                    value={profileFormData.selfIntroduction}
+                    onChangeText={(text) =>
+                      setProfileFormData({
+                        ...profileFormData,
+                        selfIntroduction: text,
+                      })
+                    }
+                    placeholder="自己紹介を入力..."
+                    multiline
+                    maxLength={300}
+                  />
+                ) : (
+                  <Text style={{ fontSize: 14, color: "#333" }}>
+                    {profileFormData.selfIntroduction || "未設定"}
+                  </Text>
+                )}
+              </View>
+
+              {/* タグ */}
+              <View style={{ marginBottom: 15 }}>
+                <Text
+                  style={{
+                    fontSize: 14,
+                    fontWeight: "bold",
+                    marginBottom: 5,
+                  }}
+                >
+                  タグ（趣味・特技など）
+                </Text>
+                {isEditingProfile ? (
+                  <View>
+                    <View style={{ flexDirection: "row", marginBottom: 10 }}>
+                      <TextInput
+                        style={{
+                          flex: 1,
+                          borderWidth: 1,
+                          borderColor: "#ddd",
+                          borderRadius: 8,
+                          padding: 10,
+                          backgroundColor: "white",
+                          fontSize: 14,
+                          marginRight: 10,
+                        }}
+                        value={tagInput}
+                        onChangeText={setTagInput}
+                        placeholder="タグを入力..."
+                        maxLength={20}
+                      />
+                      <TouchableOpacity
+                        style={{
+                          backgroundColor: "#007AFF",
+                          paddingHorizontal: 15,
+                          paddingVertical: 10,
+                          borderRadius: 8,
+                        }}
+                        onPress={addTag}
+                      >
+                        <Text style={{ color: "white", fontSize: 12 }}>
+                          追加
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                    <View style={{ flexDirection: "row", flexWrap: "wrap" }}>
+                      {profileFormData.tags?.map((tag, index) => (
+                        <TouchableOpacity
+                          key={index}
+                          style={{
+                            flexDirection: "row",
+                            alignItems: "center",
+                            backgroundColor: "#e9ecef",
+                            paddingHorizontal: 10,
+                            paddingVertical: 5,
+                            borderRadius: 15,
+                            margin: 2,
+                          }}
+                          onPress={() => removeTag(tag)}
+                        >
+                          <Text
+                            style={{
+                              fontSize: 12,
+                              color: "#666",
+                              marginRight: 5,
+                            }}
+                          >
+                            {tag}
+                          </Text>
+                          <Ionicons name="close" size={14} color="#666" />
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  </View>
+                ) : (
+                  <View style={{ flexDirection: "row", flexWrap: "wrap" }}>
+                    {profileFormData.tags?.length ? (
+                      profileFormData.tags.map((tag, index) => (
+                        <View
+                          key={index}
+                          style={{
+                            backgroundColor: "#e9ecef",
+                            paddingHorizontal: 10,
+                            paddingVertical: 5,
+                            borderRadius: 15,
+                            margin: 2,
+                          }}
+                        >
+                          <Text style={{ fontSize: 12, color: "#666" }}>
+                            {tag}
+                          </Text>
+                        </View>
+                      ))
+                    ) : (
+                      <Text style={{ fontSize: 14, color: "#333" }}>
+                        未設定
+                      </Text>
+                    )}
+                  </View>
+                )}
+              </View>
+            </View>
+          )}
+
+          {/* 編集ボタン */}
+          {isEditingProfile && (
+            <View
+              style={{
+                flexDirection: "row",
+                justifyContent: "space-between",
+                marginTop: 15,
+              }}
+            >
+              <TouchableOpacity
+                style={{
+                  backgroundColor: "#6c757d",
+                  paddingHorizontal: 20,
+                  paddingVertical: 10,
+                  borderRadius: 8,
+                  flex: 1,
+                  marginRight: 10,
+                }}
+                onPress={cancelEditingProfile}
+              >
+                <Text
+                  style={{
+                    color: "white",
+                    textAlign: "center",
+                    fontSize: 14,
+                  }}
+                >
+                  キャンセル
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={{
+                  backgroundColor: "#007AFF",
+                  paddingHorizontal: 20,
+                  paddingVertical: 10,
+                  borderRadius: 8,
+                  flex: 1,
+                }}
+                onPress={saveUserProfileData}
+                disabled={savingProfile}
+              >
+                <Text
+                  style={{
+                    color: "white",
+                    textAlign: "center",
+                    fontSize: 14,
+                  }}
+                >
+                  {savingProfile ? "保存中..." : "保存"}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          )}
+        </View>
+
+        {/* すれ違い履歴セクション */}
+        <View
+          style={{
+            backgroundColor: "#f8f9fa",
+            padding: 15,
+            marginBottom: 15,
+            borderRadius: 10,
+            borderWidth: 1,
+            borderColor: "#e9ecef",
+            marginHorizontal: 15,
+          }}
+        >
+          <Text style={{ fontSize: 16, fontWeight: "bold", marginBottom: 10 }}>
+            すれ違い履歴
+          </Text>
+          {loadingHistory ? (
+            <View style={{ alignItems: "center", padding: 20 }}>
+              <Text>履歴を読み込み中...</Text>
+            </View>
+          ) : encounterHistory.length === 0 ? (
+            <View style={{ alignItems: "center", padding: 20 }}>
+              <Text style={{ fontSize: 16, color: "#666" }}>
+                まだすれ違いの履歴がありません
+              </Text>
+            </View>
+          ) : (
+            encounterHistory.slice(0, 5).map((encounter, index) => (
+              <View
+                key={index}
+                style={{
+                  backgroundColor: "white",
+                  padding: 12,
+                  marginBottom: 8,
+                  borderRadius: 8,
+                  borderWidth: 1,
+                  borderColor: "#e9ecef",
+                }}
+              >
+                <View
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    marginBottom: 5,
+                  }}
+                >
+                  <Ionicons name="person-circle" size={30} color="#007AFF" />
+                  <View style={{ marginLeft: 10, flex: 1 }}>
+                    <Text style={{ fontSize: 14, fontWeight: "bold" }}>
+                      {encounter.otherUsername ||
+                        `User-${encounter.otherUserId?.slice(-6)}`}
+                    </Text>
+                    <Text style={{ fontSize: 12, color: "#666" }}>
+                      {encounter.timestamp?.toLocaleString("ja-JP")}
+                    </Text>
+                  </View>
+                  <Text style={{ fontSize: 12, color: "#007AFF" }}>
+                    {encounter.distance
+                      ? `${encounter.distance.toFixed(0)}m`
+                      : "不明"}
+                  </Text>
+                </View>
+                {encounter.otherOneMessage && (
+                  <Text
+                    style={{
+                      fontSize: 12,
+                      color: "#333",
+                      fontStyle: "italic",
+                    }}
+                  >
+                    {encounter.otherOneMessage}
+                  </Text>
+                )}
+              </View>
+            ))
+          )}
+          {encounterHistory.length > 5 && (
+            <Text style={{ textAlign: "center", color: "#666", fontSize: 12 }}>
+              ...他{encounterHistory.length - 5}件
+            </Text>
+          )}
+        </View>
+
+        {/* 統計情報セクション */}
+        <View
+          style={{
+            backgroundColor: "#f8f9fa",
+            padding: 15,
+            marginBottom: 15,
+            borderRadius: 10,
+            borderWidth: 1,
+            borderColor: "#e9ecef",
+            marginHorizontal: 15,
+          }}
+        >
+          <Text style={{ fontSize: 16, fontWeight: "bold", marginBottom: 10 }}>
+            統計情報
+          </Text>
+          <View
+            style={{
+              flexDirection: "row",
+              justifyContent: "space-between",
+              marginBottom: 8,
+            }}
+          >
+            <Text style={{ color: "#666" }}>すれ違い回数</Text>
+            <Text>{encounterHistory.length}</Text>
+          </View>
+        </View>
+
+        {/* フッター情報 */}
+        <View
+          style={{
+            backgroundColor: "#fff3cd",
+            padding: 15,
+            borderRadius: 10,
+            borderWidth: 1,
+            borderColor: "#ffeaa7",
+            marginHorizontal: 15,
+            marginBottom: 20,
+          }}
+        >
+          <Text
+            style={{
+              fontSize: 14,
+              color: "#856404",
+              textAlign: "center",
+            }}
+          >
+            ※ プロフィール機能が追加されました！{"\n"}
+            今後、より多くの機能を追加予定です。
+          </Text>
+        </View>
+      </ScrollView>
+    </SafeAreaView>
+  );
+}
