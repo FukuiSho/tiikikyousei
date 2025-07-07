@@ -22,7 +22,7 @@ import MapView, { Marker } from "react-native-maps";
 // 型とユーティリティのインポート
 import { styles } from "../../components/utils/styles";
 import { Post, Reply } from "../../components/utils/types";
-import { saveLocationToFirestore } from "../../services/locationService";
+import { saveLocationToFirestore, getEncounterHistory } from "../../services/locationService";
 import {
   getNearbyPosts,
   savePostToFirestore,
@@ -80,6 +80,10 @@ export default function HomeScreen() {
     isReply: boolean;
     replyId?: string;
   } | null>(null);
+  // すれ違い履歴モーダル用のstate
+  const [encounterHistoryVisible, setEncounterHistoryVisible] = useState(false);
+  const [encounterHistory, setEncounterHistory] = useState<any[]>([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
   // const [locationHistory, setLocationHistory] = useState<LocationData[]>([]);
   const [isLocationTracking, setIsLocationTracking] = useState(false);
 
@@ -138,7 +142,7 @@ export default function HomeScreen() {
                 const convertedPosts = nearbyPosts.map((firestorePost) => {
                   // Firestoreのリアクション情報を変換
                   const reactions: { [userID: string]: string } = {};
-                  const reactionCounts: { [emoji: string]: number } = {};
+                  const reactionCounts: { [emoji: number] : number } = {};
 
                   if (
                     firestorePost.reactions &&
@@ -263,7 +267,7 @@ export default function HomeScreen() {
           const convertedPosts = initialNearbyPosts.map((firestorePost) => {
             // Firestoreのリアクション情報を変換
             const reactions: { [userID: string]: string } = {};
-            const reactionCounts: { [emoji: string]: number } = {};
+            const reactionCounts: { [emoji: number] : number } = {};
 
             if (
               firestorePost.reactions &&
@@ -660,7 +664,7 @@ export default function HomeScreen() {
             const convertedPosts = updatedNearbyPosts.map((firestorePost) => {
               // Firestoreのリアクション情報を変換
               const reactions: { [userID: string]: string } = {};
-              const reactionCounts: { [emoji: string]: number } = {};
+              const reactionCounts: { [emoji: number] : number } = {};
 
               if (
                 firestorePost.reactions &&
@@ -737,11 +741,48 @@ export default function HomeScreen() {
     setReactionPickerTarget({ postId, isReply, replyId });
     setReactionPickerVisible(true);
   };
+
+  // すれ違い履歴を取得する関数
+  const fetchEncounterHistory = async () => {
+    if (!currentUserId) return;
+    
+    setLoadingHistory(true);
+    try {
+      console.log("すれ違い履歴を取得中...");
+      const history = await getEncounterHistory(currentUserId);
+      setEncounterHistory(history);
+      console.log(`すれ違い履歴を${history.length}件取得しました`);
+    } catch (error) {
+      console.error("すれ違い履歴取得エラー:", error);
+      Alert.alert("エラー", "すれ違い履歴の取得に失敗しました");
+    } finally {
+      setLoadingHistory(false);
+    }
+  };
+
+  // すれ違い履歴モーダルを開く関数
+  const handleOpenEncounterHistory = () => {
+    setEncounterHistoryVisible(true);
+    fetchEncounterHistory();
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.headerTitle}>地域共生アプリ</Text>
         <View style={{ flexDirection: "row", alignItems: "center" }}>
+          {/* すれ違い履歴ボタン */}
+          <TouchableOpacity
+            style={{
+              padding: 8,
+              marginRight: 12,
+              backgroundColor: "#007AFF",
+              borderRadius: 8,
+            }}
+            onPress={handleOpenEncounterHistory}
+          >
+            <Ionicons name="people" size={20} color="white" />
+          </TouchableOpacity>
           <View
             style={{
               width: 8,
@@ -1224,6 +1265,75 @@ export default function HomeScreen() {
             </View>
           </View>
         </TouchableOpacity>
+      </Modal>
+
+      {/* すれ違い履歴モーダル */}
+      <Modal
+        visible={encounterHistoryVisible}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setEncounterHistoryVisible(false)}
+      >
+        <View style={styles.modalContainer}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>すれ違い履歴</Text>
+              <TouchableOpacity
+                style={styles.closeButton}
+                onPress={() => setEncounterHistoryVisible(false)}
+              >
+                <Ionicons name="close" size={24} color="#666" />
+              </TouchableOpacity>
+            </View>
+            
+            <ScrollView style={styles.modalBody}>
+              {loadingHistory ? (
+                <View style={{ alignItems: 'center', padding: 20 }}>
+                  <Text>履歴を読み込み中...</Text>
+                </View>
+              ) : encounterHistory.length === 0 ? (
+                <View style={{ alignItems: 'center', padding: 20 }}>
+                  <Text style={{ fontSize: 16, color: '#666' }}>
+                    まだすれ違いの履歴がありません
+                  </Text>
+                </View>
+              ) : (
+                encounterHistory.map((encounter, index) => (
+                  <View key={index} style={{
+                    backgroundColor: '#f8f9fa',
+                    padding: 15,
+                    marginBottom: 10,
+                    borderRadius: 10,
+                    borderWidth: 1,
+                    borderColor: '#e9ecef'
+                  }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 10 }}>
+                      <Ionicons name="person-circle" size={40} color="#007AFF" />
+                      <View style={{ marginLeft: 10, flex: 1 }}>
+                        <Text style={{ fontSize: 16, fontWeight: 'bold' }}>
+                          {encounter.otherUsername || `User-${encounter.otherUserId?.slice(-6)}`}
+                        </Text>
+                        <Text style={{ fontSize: 12, color: '#666' }}>
+                          {encounter.timestamp?.toLocaleString('ja-JP')}
+                        </Text>
+                      </View>
+                      <View style={{ alignItems: 'flex-end' }}>
+                        <Text style={{ fontSize: 12, color: '#007AFF' }}>
+                          距離: {encounter.distance ? `${encounter.distance.toFixed(0)}m` : '不明'}
+                        </Text>
+                      </View>
+                    </View>
+                    {encounter.otherOneMessage && (
+                      <Text style={{ fontSize: 14, color: '#333', fontStyle: 'italic' }}>
+                        {encounter.otherOneMessage}
+                      </Text>
+                    )}
+                  </View>
+                ))
+              )}
+            </ScrollView>
+          </View>
+        </View>
       </Modal>
     </SafeAreaView>
   );
