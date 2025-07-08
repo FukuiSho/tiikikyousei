@@ -19,10 +19,7 @@ import {
 import MapView, { Marker } from "react-native-maps";
 
 // 型とユーティリティのインポート
-import {
-  getPostsForCoordinates,
-  getRepliesForPost,
-} from "../../components/utils/locationUtils";
+import { getPostsForCoordinates } from "../../components/utils/locationUtils";
 import { getReactionImage } from "../../components/utils/reactionUtils";
 import { styles } from "../../components/utils/styles";
 import { Post } from "../../components/utils/types";
@@ -131,7 +128,24 @@ export default function HomeScreen() {
           longitude: location.coords.longitude,
         },
         timestamp: new Date(),
-        replies: [],
+        replies: [
+          {
+            id: "reply-1",
+            content: "これはテストリプライです",
+            author: "リプライユーザー",
+            timestamp: new Date(),
+            reactions: {},
+            reactionCounts: {},
+          },
+          {
+            id: "reply-2",
+            content: "もう一つのテストリプライです",
+            author: "別のユーザー",
+            timestamp: new Date(),
+            reactions: {},
+            reactionCounts: {},
+          },
+        ],
         reactions: {},
         reactionCounts: {},
       };
@@ -281,7 +295,7 @@ export default function HomeScreen() {
               />
             ))}
           </MapView>
-          {/* コメントリスト表示時�Eマップ操作防止オーバ�Eレイ */}
+          {/* コメントリスト表示時のマップ操作防止オーバーレイ */}
           {messageListVisible && (
             <View
               style={{
@@ -289,8 +303,7 @@ export default function HomeScreen() {
                 top: 0,
                 left: 0,
                 right: 0,
-                bottom: 0,
-                backgroundColor: "transparent",
+                bottom: height * 0.5, // ScrollViewエリアを除外
                 zIndex: 999,
               }}
               pointerEvents="none" // マップのタッチを無効化
@@ -305,20 +318,27 @@ export default function HomeScreen() {
       {/* メッセージリストエリア */}
       {messageListVisible && (
         <KeyboardAvoidingView
-          style={styles.keyboardAvoidingView}
+          style={[
+            styles.keyboardAvoidingView,
+            {
+              zIndex: 1000,
+              height: height * 0.5, // 明示的に高さを設定
+            },
+          ]}
           behavior={Platform.OS === "ios" ? "padding" : "height"}
           keyboardVerticalOffset={Platform.OS === "ios" ? 60 : 0}
         >
-          <Animated.View
+          <View
             style={[
               styles.messageListContainer,
               {
-                transform: [{ translateY: slideAnim }],
+                // transform: [{ translateY: slideAnim }], // 一時的にコメントアウト
                 marginBottom: keyboardHeight > 0 ? keyboardHeight - 100 : 0,
+                height: height * 0.4, // 明示的に高さを設定
               },
             ]}
           >
-            {/* ハンドルバ�E */}
+            {/* ハンドルバE*/}
             <TouchableOpacity onPress={handleCloseMessageList}>
               <View style={styles.handleBar} />
             </TouchableOpacity>
@@ -333,239 +353,251 @@ export default function HomeScreen() {
 
             {/* コメントリスト*/}
             <ScrollView
-              style={[
-                styles.messageList,
-                Platform.OS === "android" && {
-                  flex: 1,
-                  maxHeight: height * 0.45,
-                },
-              ]}
+              style={{
+                height: 300,
+              }}
               contentContainerStyle={{
                 paddingBottom: 20,
-                ...(Platform.OS === "android" && {
-                  flexGrow: 1,
-                  minHeight: height * 0.4,
-                }),
               }}
-              keyboardShouldPersistTaps="handled"
+              scrollEventThrottle={16}
               showsVerticalScrollIndicator={true}
-              scrollEnabled={true}
-              nestedScrollEnabled={Platform.OS === "android"}
-              bounces={Platform.OS === "ios"}
-              scrollEventThrottle={Platform.OS === "android" ? 1 : 16}
-              removeClippedSubviews={false}
-              {...(Platform.OS === "android" && {
-                overScrollMode: "always",
-                persistentScrollbar: true,
-                fadingEdgeLength: 0,
-              })}
             >
-              {getPostsForCoordinates(selectedLocation, posts).map((post) => (
-                <View key={post.id} style={styles.messageItemContainer}>
-                  {/* 親投稿 */}
-                  <View style={styles.messageItem}>
-                    {/* ユーザーアイコン */}
-                    <View style={styles.userIcon}>
-                      <Ionicons name="person" size={20} color="#666" />
-                    </View>
-                    {/* メッセージ内容 */}
-                    <View style={styles.messageContent}>
-                      <Text style={styles.userName}>{post.author}</Text>
-                      <Text style={styles.messageText}>{post.content}</Text>
-                      <Text style={styles.messageTime}>
-                        {" "}
-                        {post.timestamp.toLocaleString("ja-JP")}
-                      </Text>
-                    </View>
-                    {/* アイコン群 */}
-                    <View style={styles.messageIcons}>
-                      <TouchableOpacity
-                        style={styles.iconButton}
-                        onPress={() =>
-                          setReplyMode(replyMode === post.id ? null : post.id)
-                        }
-                      >
-                        <Ionicons
-                          name="chatbubble-outline"
-                          size={16}
-                          color="#666"
-                        />
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={styles.iconButton}
-                        onPress={() => showReactionPicker(post.id)}
-                      >
-                        {" "}
-                        <Ionicons name="heart-outline" size={16} color="#666" />
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-                  {/* リアクション表示 */}
-                  {post.reactionCounts &&
-                    Object.keys(post.reactionCounts).length > 0 && (
-                      <View style={styles.reactionsDisplay}>
-                        {Object.entries(post.reactionCounts).map(
-                          ([pickerLabel, count]) => (
-                            <TouchableOpacity
-                              key={pickerLabel}
-                              style={[
-                                styles.reactionItem,
-                                post.reactions?.[currentUserId] ===
-                                  pickerLabel && styles.reactionItemActive,
-                              ]}
-                              onPress={() =>
-                                handleReaction(post.id, pickerLabel)
-                              }
-                            >
-                              <Image
-                                source={getReactionImage(pickerLabel)}
-                                style={{
-                                  width: 20,
-                                  height: 20,
-                                  marginRight: 4,
-                                }}
-                                resizeMode="contain"
-                              />{" "}
-                              <Text style={styles.reactionCount}>{count}</Text>
-                            </TouchableOpacity>
-                          )
-                        )}
+              {getPostsForCoordinates(selectedLocation, posts).map(
+                (post, index) => (
+                  <View
+                    key={post.id}
+                    style={[styles.messageItemContainer]}
+                    pointerEvents="box-none"
+                  >
+                    {/* 親投稿 */}
+                    <View style={styles.messageItem}>
+                      {/* ユーザーアイコン */}
+                      <View style={styles.userIcon}>
+                        <Ionicons name="person" size={20} color="#666" />
                       </View>
-                    )}
-                  {/* リプライ数表示 */}
-                  {getRepliesForPost(post.id, selectedLocation, posts).length >
-                    0 && (
-                    <TouchableOpacity
-                      style={styles.replyToggle}
-                      onPress={() => toggleReplies(post.id)}
-                    >
-                      <Text style={styles.replyToggleText}>
-                        {expandedReplies.has(post.id)
-                          ? "返信を隠す"
-                          : `返信を表示 (${getRepliesForPost(post.id, selectedLocation, posts).length}件)`}
-                      </Text>
-                    </TouchableOpacity>
-                  )}
-                  {/* 実際のリプライ投稿リスト */}
-                  {expandedReplies.has(post.id) && (
-                    <View style={styles.repliesContainer}>
-                      {getRepliesForPost(post.id, selectedLocation, posts).map(
-                        (replyPost) => (
-                          <View key={replyPost.id}>
-                            <View style={styles.replyItem}>
-                              <View style={styles.replyIcon}>
-                                <Ionicons
-                                  name="return-down-forward"
-                                  size={16}
-                                  color="#888"
+                      {/* メッセージ内容 */}
+                      <View style={styles.messageContent}>
+                        <Text style={styles.userName}>{post.author}</Text>
+                        <Text style={styles.messageText}>{post.content}</Text>
+                        <Text style={styles.messageTime}>
+                          {post.timestamp.toLocaleString("ja-JP")}
+                        </Text>
+                      </View>
+                      {/* アイコン群 */}
+                      <View style={styles.messageIcons}>
+                        <TouchableOpacity
+                          style={styles.iconButton}
+                          onPress={() =>
+                            setReplyMode &&
+                            setReplyMode(replyMode === post.id ? null : post.id)
+                          }
+                        >
+                          <Ionicons
+                            name="chatbubble-outline"
+                            size={16}
+                            color="#666"
+                          />
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={[
+                            styles.iconButton,
+                            post.reactions &&
+                              post.reactions[currentUserId] && {
+                                backgroundColor: "#e3f2fd",
+                                borderRadius: 4,
+                              },
+                          ]}
+                          onPress={() =>
+                            showReactionPicker && showReactionPicker(post.id)
+                          }
+                        >
+                          <Ionicons
+                            name={
+                              post.reactions && post.reactions[currentUserId]
+                                ? "heart"
+                                : "heart-outline"
+                            }
+                            size={16}
+                            color={
+                              post.reactions && post.reactions[currentUserId]
+                                ? "#2196f3"
+                                : "#666"
+                            }
+                          />
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+
+                    {/* リアクション表示 */}
+                    {post.reactionCounts &&
+                      Object.keys(post.reactionCounts).length > 0 && (
+                        <View style={styles.reactionSummary}>
+                          {Object.entries(post.reactionCounts).map(
+                            ([emoji, count]) => (
+                              <View key={emoji} style={styles.reactionItem}>
+                                <Image
+                                  source={getReactionImage(emoji)}
+                                  style={styles.reactionIcon}
+                                  resizeMode="contain"
                                 />
-                              </View>
-                              <View style={styles.replyContent}>
-                                <Text style={styles.replyUserName}>
-                                  {replyPost.author}
-                                </Text>
-                                <Text style={styles.replyText}>
-                                  {replyPost.content}
-                                </Text>
-                                <Text style={styles.replyTime}>
-                                  {replyPost.timestamp.toLocaleString("ja-JP")}
+                                <Text style={styles.reactionCount}>
+                                  {count}
                                 </Text>
                               </View>
-                              <View style={styles.replyActions}>
+                            )
+                          )}
+                        </View>
+                      )}
+
+                    {/* リプライ表示 */}
+                    {post.replies && post.replies.length > 0 && (
+                      <View style={styles.replySection}>
+                        <TouchableOpacity
+                          style={styles.replyToggle}
+                          onPress={() => {
+                            console.log(
+                              `リプライトグル: ${post.id}, 現在の状態: ${expandedReplies.has(post.id)}, リプライ数: ${post.replies?.length || 0}`
+                            );
+                            toggleReplies(post.id);
+                          }}
+                        >
+                          <Text style={styles.replyToggleText}>
+                            {expandedReplies.has(post.id)
+                              ? "返信を隠す"
+                              : `返信を表示 (${post.replies?.length || 0})`}
+                          </Text>
+                        </TouchableOpacity>
+
+                        {expandedReplies.has(post.id) && (
+                          <View style={styles.replyList}>
+                            {post.replies.map((reply) => (
+                              <View key={reply.id} style={styles.replyItem}>
+                                <View style={styles.replyUserIcon}>
+                                  <Ionicons
+                                    name="person"
+                                    size={16}
+                                    color="#666"
+                                  />
+                                </View>
+                                <View style={styles.replyContent}>
+                                  <Text style={styles.replyAuthor}>
+                                    {reply.author}
+                                  </Text>
+                                  <Text style={styles.replyText}>
+                                    {reply.content}
+                                  </Text>
+                                  <Text style={styles.replyTime}>
+                                    {reply.timestamp.toLocaleString("ja-JP")}
+                                  </Text>
+
+                                  {/* リプライのリアクション表示 */}
+                                  {reply.reactionCounts &&
+                                    Object.keys(reply.reactionCounts).length >
+                                      0 && (
+                                      <View
+                                        style={[
+                                          styles.reactionSummary,
+                                          { marginLeft: 0, marginTop: 4 },
+                                        ]}
+                                      >
+                                        {Object.entries(
+                                          reply.reactionCounts
+                                        ).map(([emoji, count]) => (
+                                          <View
+                                            key={emoji}
+                                            style={styles.reactionItem}
+                                          >
+                                            <Image
+                                              source={getReactionImage(emoji)}
+                                              style={styles.reactionIcon}
+                                              resizeMode="contain"
+                                            />
+                                            <Text style={styles.reactionCount}>
+                                              {count}
+                                            </Text>
+                                          </View>
+                                        ))}
+                                      </View>
+                                    )}
+                                </View>
                                 <TouchableOpacity
-                                  style={styles.replyActionButton}
+                                  style={[
+                                    styles.replyReactionButton,
+                                    reply.reactions &&
+                                      reply.reactions[currentUserId] && {
+                                        backgroundColor: "#e3f2fd",
+                                        borderRadius: 4,
+                                      },
+                                  ]}
                                   onPress={() =>
-                                    showReactionPicker(replyPost.id, false)
+                                    showReactionPicker &&
+                                    showReactionPicker(post.id, true, reply.id)
                                   }
                                 >
                                   <Ionicons
-                                    name="heart-outline"
+                                    name={
+                                      reply.reactions &&
+                                      reply.reactions[currentUserId]
+                                        ? "heart"
+                                        : "heart-outline"
+                                    }
                                     size={14}
-                                    color="#666"
+                                    color={
+                                      reply.reactions &&
+                                      reply.reactions[currentUserId]
+                                        ? "#2196f3"
+                                        : "#666"
+                                    }
                                   />
                                 </TouchableOpacity>
                               </View>
-                            </View>
-
-                            {/* リプライ投稿のリアクション表示 */}
-                            {replyPost.reactionCounts &&
-                              Object.keys(replyPost.reactionCounts).length >
-                                0 && (
-                                <View style={styles.replyReactionsDisplay}>
-                                  {Object.entries(replyPost.reactionCounts).map(
-                                    ([pickerLabel, count]) => (
-                                      <TouchableOpacity
-                                        key={pickerLabel}
-                                        style={[
-                                          styles.replyReactionItem,
-                                          replyPost.reactions?.[
-                                            currentUserId
-                                          ] === pickerLabel &&
-                                            styles.reactionItemActive,
-                                        ]}
-                                        onPress={() =>
-                                          handleReaction(
-                                            replyPost.id,
-                                            pickerLabel
-                                          )
-                                        }
-                                      >
-                                        <Image
-                                          source={getReactionImage(pickerLabel)}
-                                          style={{
-                                            width: 14,
-                                            height: 14,
-                                            marginRight: 2,
-                                          }}
-                                          resizeMode="contain"
-                                        />
-                                        <Text style={styles.reactionCount}>
-                                          {String(count)}
-                                        </Text>
-                                      </TouchableOpacity>
-                                    )
-                                  )}
-                                </View>
-                              )}
+                            ))}
                           </View>
-                        )
-                      )}
-                    </View>
-                  )}
-                  {/* リプライ入力フォーム */}
-                  {replyMode === post.id && (
-                    <View style={styles.replyForm}>
-                      <TextInput
-                        style={styles.replyInput}
-                        placeholder="返信を入力..."
-                        value={newReply.content}
-                        onChangeText={(text) =>
-                          setNewReply({ ...newReply, content: text })
-                        }
-                        multiline={true}
-                        maxLength={200}
-                      />
-                      <View style={styles.replyFormButtons}>
-                        <TouchableOpacity
-                          style={styles.replyCancel}
-                          onPress={() => {
-                            setReplyMode(null);
-                            setNewReply({ content: "" });
-                          }}
-                        >
-                          <Text style={styles.replyCancelText}>キャンセル</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          style={styles.replySubmit}
-                          onPress={() => handleReplySubmit(post.id)}
-                        >
-                          <Text style={styles.replySubmitText}>返信</Text>
-                        </TouchableOpacity>
+                        )}
                       </View>
-                    </View>
-                  )}
-                </View>
-              ))}
+                    )}
+
+                    {/* リプライ入力フォーム */}
+                    {replyMode === post.id && (
+                      <View style={styles.replyInputSection}>
+                        <TextInput
+                          style={styles.replyInput}
+                          placeholder="返信を入力..."
+                          value={newReply.content}
+                          onChangeText={(text) =>
+                            setNewReply({ ...newReply, content: text })
+                          }
+                          multiline
+                          maxLength={200}
+                        />
+                        <View style={styles.replyButtonGroup}>
+                          <TouchableOpacity
+                            style={styles.submitButton}
+                            onPress={() => {
+                              console.log("リプライ送信ボタンが押されました", {
+                                postId: post.id,
+                                content: newReply.content,
+                                contentLength: newReply.content.trim().length,
+                              });
+                              handleReplySubmit(post.id);
+                            }}
+                          >
+                            <Text style={styles.submitButtonText}>返信</Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            style={styles.cancelButton}
+                            onPress={() => setReplyMode(null)}
+                          >
+                            <Text style={styles.cancelButtonText}>
+                              キャンセル
+                            </Text>
+                          </TouchableOpacity>
+                        </View>
+                      </View>
+                    )}
+                  </View>
+                )
+              )}
 
               {getPostsForCoordinates(selectedLocation, posts).length === 0 && (
                 <View style={styles.emptyState}>
@@ -575,7 +607,7 @@ export default function HomeScreen() {
                 </View>
               )}
             </ScrollView>
-          </Animated.View>
+          </View>
         </KeyboardAvoidingView>
       )}
       {/* フローティングボタン群 */}

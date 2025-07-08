@@ -1,21 +1,24 @@
 import * as Location from "expo-location";
 import { useCallback, useState } from "react";
 import { Alert } from "react-native";
-import { Post, PostFormData } from "../components/utils/types";
+import { Post, Reply } from "../components/utils/types";
 import {
-  createPost,
-  createReply,
   getNearbyPosts,
+  savePostToFirestore,
   updatePostReaction,
   updateReplyReaction,
 } from "../services/postService";
 
-interface UsePostManagementProps {
+export interface PostFormData {
+  content: string;
+}
+
+export interface UsePostManagementProps {
   currentUserId: string;
   location: Location.LocationObject | null;
 }
 
-interface UsePostManagementReturn {
+export interface UsePostManagementReturn {
   // State
   posts: Post[];
   newPost: PostFormData;
@@ -73,33 +76,31 @@ export const usePostManagement = ({
 
   const handleCreatePost = useCallback(
     async (onSuccess?: () => void) => {
-      if (!newPost.content.trim() || !location) {
+      if (!newPost.content.trim()) {
         Alert.alert("エラー", "投稿内容を入力してください");
         return;
       }
 
       if (!location) {
-        console.error("位置情報が取得できません");
         Alert.alert("エラー", "位置情報が取得できません");
         return;
       }
 
       try {
-        console.log("投稿作成開始...");
-        const postData = {
-          content: newPost.content,
-          location: {
-            latitude: location.coords.latitude,
-            longitude: location.coords.longitude,
-          },
-          userId: currentUserId,
-        };
+        console.log("投稿作成開始 - UserID:", currentUserId);
 
-        const result = await createPost(postData);
-        if (result) {
-          console.log("投稿作成成功:", result);
-          const newPostObj: Post = {
-            id: result.id,
+        const postId = await savePostToFirestore({
+          text: newPost.content,
+          latitude: location.coords.latitude,
+          longitude: location.coords.longitude,
+          photoURL: undefined,
+        });
+
+        if (postId) {
+          console.log("投稿保存成功 - PostID:", postId);
+
+          const post: Post = {
+            id: postId,
             content: newPost.content,
             author: `User-${currentUserId.slice(-6)}`,
             location: {
@@ -107,14 +108,22 @@ export const usePostManagement = ({
               longitude: location.coords.longitude,
             },
             timestamp: new Date(),
-            replies: [],
+            parentPostID: undefined,
             reactions: {},
             reactionCounts: {},
           };
 
-          setPosts((prev) => [newPostObj, ...prev]);
+          setPosts((prev) => [post, ...prev]);
           setNewPost({ content: "" });
-          onSuccess?.();
+          Alert.alert("成功", "投稿が作成されました");
+          
+          // 投稿作成成功をログに記録（統計情報の更新用）
+          console.log(`ユーザー ${currentUserId} の投稿が作成されました - PostID: ${postId}`);
+          
+          onSuccess?.(); // 成功時のコールバックを実行
+          return Promise.resolve();
+        } else {
+          Alert.alert("エラー", "投稿の保存に失敗しました");
         }
       } catch (error) {
         console.error("投稿作成エラー:", error);
@@ -131,22 +140,32 @@ export const usePostManagement = ({
         return;
       }
 
-      try {
-        console.log("返信作成開始...", {
-          postId,
-          content: newReply.content,
-          userId: currentUserId,
-        });
-        const replyData = {
-          content: newReply.content,
-          userId: currentUserId,
-        };
+      if (!location) {
+        Alert.alert("エラー", "位置情報が取得できません");
+        return;
+      }
 
-        const result = await createReply(postId, replyData);
-        if (result) {
-          console.log("返信作成成功:", result);
-          const newReplyObj = {
-            id: result.id,
+      try {
+        console.log(
+          "返信作成開始 - UserID:",
+          currentUserId,
+          "ParentPostID:",
+          postId
+        );
+
+        const replyId = await savePostToFirestore({
+          text: newReply.content,
+          latitude: location.coords.latitude,
+          longitude: location.coords.longitude,
+          parentPostID: postId,
+          photoURL: undefined,
+        });
+
+        if (replyId) {
+          console.log("返信保存成功 - ReplyID:", replyId);
+
+          const reply: Reply = {
+            id: replyId,
             content: newReply.content,
             author: `User-${currentUserId.slice(-6)}`,
             timestamp: new Date(),
@@ -154,33 +173,30 @@ export const usePostManagement = ({
             reactionCounts: {},
           };
 
-          console.log("ローカル状態を更新中...", newReplyObj);
-          setPosts((prev) => {
-            const updatedPosts = prev.map((post) =>
-              post.id === postId
-                ? {
-                    ...post,
-                    replies: [...(post.replies || []), newReplyObj],
-                  }
-                : post
-            );
-            console.log("投稿状態更新完了:", updatedPosts);
-            return updatedPosts;
-          });
+          setPosts((prev) =>
+            prev.map((post) => {
+              if (post.id === postId) {
+                return {
+                  ...post,
+                  replies: [...(post.replies || []), reply],
+                };
+              }
+              return post;
+            })
+          );
 
           setNewReply({ content: "" });
           setReplyMode(null);
-          console.log("返信送信完了");
+          Alert.alert("成功", "返信が投稿されました");
         } else {
-          console.error("返信作成に失敗: resultがnull");
-          Alert.alert("エラー", "返信の作成に失敗しました");
+          Alert.alert("エラー", "返信の保存に失敗しました");
         }
       } catch (error) {
         console.error("返信作成エラー:", error);
         Alert.alert("エラー", "返信の作成に失敗しました");
       }
     },
-    [newReply.content, currentUserId, setPosts, setNewReply, setReplyMode]
+    [newReply.content, location, currentUserId]
   );
 
   const handleReaction = useCallback(
@@ -213,58 +229,51 @@ export const usePostManagement = ({
             if (post.id === postId) {
               if (isReply && replyId) {
                 // リプライのリアクション処理
-                const updatedReplies =
-                  post.replies?.map((reply) => {
-                    if (reply.id === replyId) {
-                      const reactions = { ...(reply.reactions || {}) };
-                      const reactionCounts = {
-                        ...(reply.reactionCounts || {}),
-                      };
+                const updatedReplies = post.replies?.map((reply) => {
+                  if (reply.id === replyId) {
+                    const reactions = { ...(reply.reactions || {}) };
+                    const reactionCounts = { ...(reply.reactionCounts || {}) };
 
-                      const currentReaction = reactions[currentUserId];
+                    const currentReaction = reactions[currentUserId];
 
-                      if (currentReaction === pickerLabel) {
-                        // 同じリアクションの場合は削除
-                        delete reactions[currentUserId];
-                        reactionCounts[pickerLabel] = Math.max(
-                          0,
-                          (reactionCounts[pickerLabel] || 0) - 1
-                        );
-                        if (reactionCounts[pickerLabel] === 0) {
-                          delete reactionCounts[pickerLabel];
-                        }
-                        console.log(
-                          `リプライのリアクション削除: ${pickerLabel}`
-                        );
-                      } else {
-                        // 異なるリアクションまたは新規の場合
-                        if (currentReaction) {
-                          // 既存のリアクションを減らす
-                          reactionCounts[currentReaction] = Math.max(
-                            0,
-                            (reactionCounts[currentReaction] || 0) - 1
-                          );
-                          if (reactionCounts[currentReaction] === 0) {
-                            delete reactionCounts[currentReaction];
-                          }
-                        }
-                        // 新しいリアクションを追加
-                        reactions[currentUserId] = pickerLabel;
-                        reactionCounts[pickerLabel] =
-                          (reactionCounts[pickerLabel] || 0) + 1;
-                        console.log(
-                          `リプライのリアクション追加: ${pickerLabel}`
-                        );
+                    if (currentReaction === pickerLabel) {
+                      // 同じリアクションの場合は削除
+                      delete reactions[currentUserId];
+                      reactionCounts[pickerLabel] = Math.max(
+                        0,
+                        (reactionCounts[pickerLabel] || 0) - 1
+                      );
+                      if (reactionCounts[pickerLabel] === 0) {
+                        delete reactionCounts[pickerLabel];
                       }
-
-                      return {
-                        ...reply,
-                        reactions,
-                        reactionCounts,
-                      };
+                      console.log(`リプライのリアクション削除: ${pickerLabel}`);
+                    } else {
+                      // 異なるリアクションまたは新規の場合
+                      if (currentReaction) {
+                        // 既存のリアクションを減らす
+                        reactionCounts[currentReaction] = Math.max(
+                          0,
+                          (reactionCounts[currentReaction] || 0) - 1
+                        );
+                        if (reactionCounts[currentReaction] === 0) {
+                          delete reactionCounts[currentReaction];
+                        }
+                      }
+                      // 新しいリアクションを追加
+                      reactions[currentUserId] = pickerLabel;
+                      reactionCounts[pickerLabel] =
+                        (reactionCounts[pickerLabel] || 0) + 1;
+                      console.log(`リプライのリアクション追加: ${pickerLabel}`);
                     }
-                    return reply;
-                  }) || [];
+
+                    return {
+                      ...reply,
+                      reactions,
+                      reactionCounts,
+                    };
+                  }
+                  return reply;
+                }) || [];
 
                 return {
                   ...post,
@@ -318,14 +327,91 @@ export const usePostManagement = ({
           })
         );
 
+        // リアクション処理後にデータを同期
+        if (location) {
+          try {
+            console.log("リアクション後の投稿データ同期中...");
+            const updatedNearbyPosts = await getNearbyPosts(
+              location.coords.latitude,
+              location.coords.longitude,
+              1.0
+            );
+
+            if (updatedNearbyPosts.length > 0) {
+              const convertedPosts = updatedNearbyPosts.map((firestorePost) => {
+                const reactions: { [userID: string]: string } = {};
+                const reactionCounts: { [emoji: string]: number } = {};
+
+                if (
+                  firestorePost.reactions &&
+                  typeof firestorePost.reactions === "object"
+                ) {
+                  Object.entries(firestorePost.reactions).forEach(
+                    ([emoji, data]: [string, any]) => {
+                      if (data && data.userIds && Array.isArray(data.userIds)) {
+                        reactionCounts[emoji] =
+                          data.count || data.userIds.length;
+                        data.userIds.forEach((userId: string) => {
+                          reactions[userId] = emoji;
+                        });
+                      }
+                    }
+                  );
+                }
+
+                return {
+                  id: firestorePost.id,
+                  content: firestorePost.text,
+                  author: `User-${firestorePost.userID.slice(-6)}`,
+                  location: {
+                    latitude: firestorePost.coordinates.latitude,
+                    longitude: firestorePost.coordinates.longitude,
+                  },
+                  timestamp: firestorePost.timestamp,
+                  parentPostID: firestorePost.parentPostID,
+                  reactions: reactions,
+                  reactionCounts: reactionCounts,
+                  replies: [],
+                };
+              });
+
+              // 既存の投稿を更新（リアクション情報のみ）
+              setPosts((prevPosts) => {
+                const updatedPosts = [...prevPosts];
+
+                convertedPosts.forEach((newPost) => {
+                  const existingPostIndex = updatedPosts.findIndex(
+                    (p) => p.id === newPost.id
+                  );
+                  if (existingPostIndex >= 0) {
+                    updatedPosts[existingPostIndex] = {
+                      ...updatedPosts[existingPostIndex],
+                      reactions: newPost.reactions,
+                      reactionCounts: newPost.reactionCounts,
+                    };
+                  }
+                });
+
+                return updatedPosts;
+              });
+              console.log("リアクション後の同期完了");
+            }
+          } catch (syncError) {
+            console.error("リアクション後の同期エラー:", syncError);
+          }
+        }
+
         console.log("リアクション処理完了");
       } catch (error) {
         console.error("リアクション処理エラー:", error);
         Alert.alert("エラー", "リアクションの処理中にエラーが発生しました");
       }
     },
-    [currentUserId]
+    [currentUserId, location]
   );
+
+  const loadNearbyPosts = useCallback(async () => {
+    if (!location) return;
 
   const loadNearbyPosts = useCallback(async () => {
     if (!location) return;
@@ -380,14 +466,7 @@ export const usePostManagement = ({
           const updatedPosts = [...prevPosts];
           let hasNewPosts = false;
 
-          // 親投稿とリプライを分離
-          const parentPosts = convertedPosts.filter(
-            (post) => !post.parentPostID
-          );
-          const replies = convertedPosts.filter((post) => post.parentPostID);
-
-          // 親投稿を処理
-          parentPosts.forEach((newPost) => {
+          convertedPosts.forEach((newPost) => {
             const existingPostIndex = updatedPosts.findIndex(
               (p) => p.id === newPost.id
             );
@@ -403,47 +482,8 @@ export const usePostManagement = ({
             }
           });
 
-          // リプライを親投稿に追加
-          replies.forEach((reply) => {
-            const parentPostIndex = updatedPosts.findIndex(
-              (p) => p.id === reply.parentPostID
-            );
-            if (parentPostIndex >= 0) {
-              const existingReplies =
-                updatedPosts[parentPostIndex].replies || [];
-              const existingReplyIndex = existingReplies.findIndex(
-                (r) => r.id === reply.id
-              );
-
-              if (existingReplyIndex >= 0) {
-                // 既存のリプライを更新
-                existingReplies[existingReplyIndex] = {
-                  ...existingReplies[existingReplyIndex],
-                  reactions: reply.reactions,
-                  reactionCounts: reply.reactionCounts,
-                };
-              } else {
-                // 新しいリプライを追加
-                existingReplies.push({
-                  id: reply.id,
-                  content: reply.content,
-                  author: reply.author,
-                  timestamp: reply.timestamp,
-                  reactions: reply.reactions,
-                  reactionCounts: reply.reactionCounts,
-                });
-                hasNewPosts = true;
-              }
-
-              updatedPosts[parentPostIndex] = {
-                ...updatedPosts[parentPostIndex],
-                replies: existingReplies,
-              };
-            }
-          });
-
           if (hasNewPosts) {
-            console.log(`新しい投稿またはリプライが追加されました`);
+            console.log(`新しい投稿が追加されました`);
           }
 
           return updatedPosts;

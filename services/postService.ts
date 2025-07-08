@@ -192,6 +192,60 @@ export const createReplyPost = async (
 };
 
 /**
+ * 返信を作成する（簡易版）
+ */
+export const createReply = async (
+  parentPostID: string,
+  replyData: { content: string; userId: string }
+): Promise<{ id: string } | null> => {
+  try {
+    console.log(`返信を作成: 親投稿ID ${parentPostID}`, replyData);
+
+    // 親投稿の位置情報を取得（実際の実装では親投稿から位置情報を取得）
+    // ここでは簡易的に固定値を使用
+    const defaultLocation = { latitude: 35.6762, longitude: 139.6503 }; // 東京駅
+
+    const replyPost: NewPost = {
+      text: replyData.content,
+      latitude: defaultLocation.latitude,
+      longitude: defaultLocation.longitude,
+      parentPostID,
+    };
+
+    const postId = await savePostToFirestore(replyPost);
+    return postId ? { id: postId } : null;
+  } catch (error) {
+    console.error("返信作成エラー:", error);
+    return null;
+  }
+};
+
+/**
+ * 投稿を作成する（簡易版）
+ */
+export const createPost = async (postData: {
+  content: string;
+  location: { latitude: number; longitude: number };
+  userId: string;
+}): Promise<{ id: string } | null> => {
+  try {
+    console.log("投稿を作成:", postData);
+
+    const newPost: NewPost = {
+      text: postData.content,
+      latitude: postData.location.latitude,
+      longitude: postData.location.longitude,
+    };
+
+    const postId = await savePostToFirestore(newPost);
+    return postId ? { id: postId } : null;
+  } catch (error) {
+    console.error("投稿作成エラー:", error);
+    return null;
+  }
+};
+
+/**
  * 指定された位置周辺の投稿を取得
  * ジオハッシュを使用して効率的に検索
  */
@@ -392,6 +446,112 @@ export const updatePostReaction = async (
     return result;
   } catch (error) {
     console.error("リアクション更新エラー:", error);
+    return false;
+  }
+};
+
+/**
+ * リプライにリアクションを追加/削除（Firestoreトランザクション使用）
+ */
+export const updateReplyReaction = async (
+  postId: string,
+  replyId: string,
+  emoji: string
+): Promise<boolean> => {
+  try {
+    const userID = await getPersistentUserId();
+
+    console.log(
+      `リプライリアクション更新: PostID=${postId}, ReplyID=${replyId}, Emoji=${emoji}, UserID=${userID}`
+    );
+
+    // Firestoreトランザクションでリプライのリアクションを更新
+    const result = await runTransaction(db, async (transaction) => {
+      const postRef = doc(db, "posts", postId);
+      const postDoc = await transaction.get(postRef);
+
+      if (!postDoc.exists()) {
+        console.error("投稿が見つかりません:", postId);
+        return false;
+      }
+
+      const postData = postDoc.data();
+      const replies = postData.replies || [];
+
+      // 対象のリプライを見つける
+      const replyIndex = replies.findIndex(
+        (reply: any) => reply.id === replyId
+      );
+      if (replyIndex === -1) {
+        console.error("リプライが見つかりません:", replyId);
+        return false;
+      }
+
+      const reply = replies[replyIndex];
+      const currentReactions = reply.reactions || {};
+
+      // 同じ絵文字の場合は削除、異なる場合は追加/変更
+      if (
+        currentReactions[emoji] &&
+        currentReactions[emoji].userIds.includes(userID)
+      ) {
+        // 既存のリアクションを削除
+        currentReactions[emoji].userIds = currentReactions[
+          emoji
+        ].userIds.filter((id: string) => id !== userID);
+        currentReactions[emoji].count = currentReactions[emoji].userIds.length;
+
+        if (currentReactions[emoji].count === 0) {
+          delete currentReactions[emoji];
+        }
+      } else {
+        // 他のリアクションから削除
+        Object.keys(currentReactions).forEach((existingEmoji) => {
+          if (existingEmoji !== emoji) {
+            currentReactions[existingEmoji].userIds = currentReactions[
+              existingEmoji
+            ].userIds.filter((id: string) => id !== userID);
+            currentReactions[existingEmoji].count =
+              currentReactions[existingEmoji].userIds.length;
+
+            if (currentReactions[existingEmoji].count === 0) {
+              delete currentReactions[existingEmoji];
+            }
+          }
+        });
+
+        // 新しいリアクションを追加
+        if (!currentReactions[emoji]) {
+          currentReactions[emoji] = {
+            userIds: [],
+            count: 0,
+          };
+        }
+        currentReactions[emoji].userIds.push(userID);
+        currentReactions[emoji].count = currentReactions[emoji].userIds.length;
+      }
+
+      // リプライを更新
+      replies[replyIndex] = {
+        ...reply,
+        reactions: currentReactions,
+      };
+
+      // 投稿を更新
+      transaction.update(postRef, { replies });
+
+      return true;
+    });
+
+    if (result) {
+      console.log("✅ リプライリアクション更新成功");
+      return true;
+    } else {
+      console.error("❌ リプライリアクション更新失敗");
+      return false;
+    }
+  } catch (error) {
+    console.error("❌ リプライリアクション更新エラー:", error);
     return false;
   }
 };

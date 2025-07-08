@@ -28,6 +28,7 @@ import {
   query,
   serverTimestamp,
   setDoc,
+  where,
 } from "firebase/firestore";
 import { db } from "../firebase.config";
 
@@ -689,6 +690,10 @@ export const detectAndRecordEncounters = async (
             distance: Math.round(distance * 100) / 100,
           });
 
+          // すれ違い成功をログに記録
+          console.log(
+            `✅ すれ違い記録完了: ${myUserId} ⟷ ${otherUser.id} (${Math.round(distance * 100) / 100}m)`
+          );
           console.log(`新規すれ違いを記録: ${otherUser.username}`);
         } else {
           console.log(
@@ -1611,5 +1616,26 @@ export const performEncounterDetection = async (
   } catch (error) {
     console.error("すれ違い検知専用処理エラー:", error);
     return [];
+  }
+};
+
+// ユーザーの投稿数を取得する関数
+export const getUserPostCount = async (userId: string): Promise<number> => {
+  try {
+    if (!userId) {
+      console.warn("getUserPostCount: ユーザーIDが指定されていません");
+      return 0;
+    }
+
+    const q = query(collection(db, "posts"), where("userID", "==", userId));
+
+    const querySnapshot = await getDocs(q);
+    const postCount = querySnapshot.size;
+
+    console.log(`✅ ユーザー ${userId} の投稿数: ${postCount}`);
+    return postCount;
+  } catch (error) {
+    console.error("❌ 投稿数取得エラー:", error);
+    return 0;
   }
 };

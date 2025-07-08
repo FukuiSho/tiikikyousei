@@ -95,6 +95,10 @@ export interface UserProfileUpdateData {
   tags: string[];
 }
 
+export interface PostFormData {
+  content: string;
+}
+
 // 選択肢の定数定義
 export const GENDER_OPTIONS = ["男性", "女性", "その他"];
 

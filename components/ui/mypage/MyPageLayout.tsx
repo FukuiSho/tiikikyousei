@@ -1,5 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
-import React, { useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   ScrollView,
   Text,
@@ -8,6 +8,10 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import {
+  getEncounterSummary,
+  getUserPostCount,
+} from "../../../services/locationService";
 import { styles } from "../../utils/styles";
 import {
   BIRTH_DAYS,
@@ -306,6 +310,46 @@ export const MyPageLayout: React.FC<MyPageLayoutProps> = ({
   onTagRemove,
   onHomeNavigation,
 }) => {
+  const [postCount, setPostCount] = useState<number>(0);
+  const [encounterSummary, setEncounterSummary] = useState<{
+    todayCount: number;
+    weeklyCount: number;
+    totalCount: number;
+    uniqueUsersCount: number;
+  }>({
+    todayCount: 0,
+    weeklyCount: 0,
+    totalCount: 0,
+    uniqueUsersCount: 0,
+  });
+
+  // 統計情報を再取得する関数
+  const refreshStats = useCallback(async () => {
+    if (userProfile?.userId) {
+      try {
+        const [posts, encounters] = await Promise.all([
+          getUserPostCount(userProfile.userId),
+          getEncounterSummary(userProfile.userId),
+        ]);
+
+        setPostCount(posts);
+        setEncounterSummary(encounters);
+      } catch (error) {
+        console.error("統計情報の更新に失敗:", error);
+      }
+    }
+  }, [userProfile?.userId]);
+
+  // 統計情報を取得
+  useEffect(() => {
+    refreshStats();
+  }, [refreshStats]);
+
+  // フォーカス時に統計情報を更新（画面に戻った時）
+  useEffect(() => {
+    const interval = setInterval(refreshStats, 60000); // 60秒間隔で更新
+    return () => clearInterval(interval);
+  }, [refreshStats]);
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView style={{ flex: 1 }}>
@@ -381,6 +425,43 @@ export const MyPageLayout: React.FC<MyPageLayoutProps> = ({
           </View>
         </View>
 
+        {/* 統計情報セクション */}
+        <View style={styles.statsSection}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>統計情報</Text>
+            <TouchableOpacity
+              onPress={refreshStats}
+              style={styles.refreshButton}
+            >
+              <Ionicons name="refresh" size={20} color="#4A90E2" />
+            </TouchableOpacity>
+          </View>
+          <View style={styles.statsGrid}>
+            <View style={styles.statItem}>
+              <Text style={styles.statNumber}>{postCount}</Text>
+              <Text style={styles.statLabel}>投稿数</Text>
+            </View>
+            <View style={styles.statItem}>
+              <Text style={styles.statNumber}>
+                {encounterSummary.totalCount}
+              </Text>
+              <Text style={styles.statLabel}>総すれ違い数</Text>
+            </View>
+            <View style={styles.statItem}>
+              <Text style={styles.statNumber}>
+                {encounterSummary.todayCount}
+              </Text>
+              <Text style={styles.statLabel}>今日のすれ違い</Text>
+            </View>
+            <View style={styles.statItem}>
+              <Text style={styles.statNumber}>
+                {encounterSummary.uniqueUsersCount}
+              </Text>
+              <Text style={styles.statLabel}>すれ違った人数</Text>
+            </View>
+          </View>
+        </View>
+
         {/* タブナビゲーション */}
         <View style={styles.tabNavigation}>
           <TouchableOpacity
@@ -415,16 +496,42 @@ export const MyPageLayout: React.FC<MyPageLayoutProps> = ({
         {profileTabIndex === 0 ? (
           // 基本情報タブ
           <View style={styles.tabContent}>
-            <View style={styles.statsSection}>
-              <Text style={styles.sectionTitle}>統計情報</Text>
-              <View style={styles.statsGrid}>
-                <View style={styles.statItem}>
-                  <Text style={styles.statNumber}>0</Text>
-                  <Text style={styles.statLabel}>すれ違い回数</Text>
+            <View style={styles.profileSection}>
+              <Text style={styles.sectionTitle}>基本情報</Text>
+              <View style={styles.profileBasicInfo}>
+                <View style={styles.profileRow}>
+                  <Text style={styles.profileLabel}>表示名:</Text>
+                  <Text style={styles.profileValue}>
+                    {userProfile?.displayName || "未設定"}
+                  </Text>
                 </View>
-                <View style={styles.statItem}>
-                  <Text style={styles.statNumber}>0</Text>
-                  <Text style={styles.statLabel}>投稿数</Text>
+                <View style={styles.profileRow}>
+                  <Text style={styles.profileLabel}>ユーザーID:</Text>
+                  <Text style={styles.profileValue}>
+                    {userProfile?.userId || "未設定"}
+                  </Text>
+                </View>
+                <View style={styles.profileRow}>
+                  <Text style={styles.profileLabel}>投稿数:</Text>
+                  <Text style={styles.profileValue}>{postCount}件</Text>
+                </View>
+                <View style={styles.profileRow}>
+                  <Text style={styles.profileLabel}>総すれ違い数:</Text>
+                  <Text style={styles.profileValue}>
+                    {encounterSummary.totalCount}回
+                  </Text>
+                </View>
+                <View style={styles.profileRow}>
+                  <Text style={styles.profileLabel}>今日のすれ違い:</Text>
+                  <Text style={styles.profileValue}>
+                    {encounterSummary.todayCount}回
+                  </Text>
+                </View>
+                <View style={[styles.profileRow, { borderBottomWidth: 0 }]}>
+                  <Text style={styles.profileLabel}>すれ違った人数:</Text>
+                  <Text style={styles.profileValue}>
+                    {encounterSummary.uniqueUsersCount}人
+                  </Text>
                 </View>
               </View>
             </View>

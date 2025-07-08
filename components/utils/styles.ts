@@ -515,16 +515,10 @@ export const styles = StyleSheet.create({
     borderRadius: 12,
     paddingHorizontal: 8,
     paddingVertical: 4,
-    marginRight: 6,
-    marginBottom: 4,
   },
-  reactionItemActive: {
-    backgroundColor: "#e3f2fd",
-    borderWidth: 1,
-    borderColor: "#2196f3",
-  },
-  reactionEmoji: {
-    fontSize: 14,
+  reactionIcon: {
+    width: 16,
+    height: 16,
     marginRight: 4,
   },
   reactionCount: {
@@ -557,7 +551,6 @@ export const styles = StyleSheet.create({
     marginRight: 4,
     marginBottom: 2,
   },
-
   // Web用スタイル
   webMapPlaceholder: {
     flex: 1,
@@ -633,8 +626,19 @@ export const styles = StyleSheet.create({
     borderBottomColor: "#e9ecef",
   },
   profileSection: {
-    backgroundColor: "white",
-    marginBottom: 16,
+    backgroundColor: "#fff",
+    marginVertical: 10,
+    marginHorizontal: 20,
+    padding: 20,
+    borderRadius: 12,
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 3.84,
+    elevation: 5,
   },
   profileHeader: {
     flexDirection: "row",
@@ -790,24 +794,44 @@ export const styles = StyleSheet.create({
     backgroundColor: "white",
   },
   statsSection: {
-    marginBottom: 24,
+    backgroundColor: "#f8f9fa",
+    margin: 15,
+    padding: 15,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#e9ecef",
   },
   statsGrid: {
     flexDirection: "row",
-    justifyContent: "space-around",
+    flexWrap: "wrap",
+    justifyContent: "space-between",
+    marginTop: 10,
   },
   statItem: {
+    width: "48%",
+    backgroundColor: "white",
+    padding: 15,
+    borderRadius: 8,
     alignItems: "center",
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: "#e9ecef",
   },
   statNumber: {
     fontSize: 24,
     fontWeight: "bold",
-    color: "#007AFF",
-    marginBottom: 4,
+    color: "#4A90E2",
+    marginBottom: 5,
   },
   statLabel: {
     fontSize: 12,
     color: "#666",
+    textAlign: "center",
+  },
+  refreshButton: {
+    padding: 8,
+    borderRadius: 20,
+    backgroundColor: "#f0f0f0",
   },
   profileDetailSection: {
     flex: 1,
@@ -957,5 +981,77 @@ export const styles = StyleSheet.create({
   datePickerButtonText: {
     fontSize: 14,
     color: "#333",
+  },
+  // 基本情報セクション用のスタイル
+  profileBasicInfo: {
+    marginTop: 10,
+  },
+  profileRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#f0f0f0",
+  },
+  profileLabel: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#333",
+  },
+  profileValue: {
+    fontSize: 16,
+    color: "#666",
+  },
+  // リアクション表示用のスタイル
+  reactionSummary: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    marginTop: 8,
+    marginLeft: 50,
+    gap: 8,
+  },
+
+  // リプライ表示用のスタイル
+  replySection: {
+    marginTop: 8,
+    marginLeft: 50,
+  },
+  replyList: {
+    marginTop: 8,
+  },
+  replyUserIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "#f0f0f0",
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 8,
+  },
+  replyAuthor: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#333",
+    marginBottom: 2,
+  },
+  replyReactionButton: {
+    padding: 4,
+    marginLeft: 8,
+  },
+
+  // リプライ入力用のスタイル
+  replyInputSection: {
+    marginTop: 8,
+    marginLeft: 50,
+    backgroundColor: "#f8f9fa",
+    borderRadius: 8,
+    padding: 12,
+  },
+  replyButtonGroup: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    gap: 8,
+    marginTop: 8,
   },
 });
