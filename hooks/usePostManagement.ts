@@ -1,0 +1,479 @@
+import * as Location from "expo-location";
+import { useCallback, useState } from "react";
+import { Alert } from "react-native";
+import { Post, Reply } from "../components/utils/types";
+import {
+  getNearbyPosts,
+  savePostToFirestore,
+  updatePostReaction,
+} from "../services/postService";
+
+export interface PostFormData {
+  content: string;
+}
+
+export interface UsePostManagementProps {
+  currentUserId: string;
+  location: Location.LocationObject | null;
+}
+
+export interface UsePostManagementReturn {
+  // State
+  posts: Post[];
+  newPost: PostFormData;
+  newReply: PostFormData;
+  expandedReplies: Set<string>;
+  replyMode: string | null;
+  reactionPickerVisible: boolean;
+  reactionPickerTarget: {
+    postId: string;
+    isReply: boolean;
+    replyId?: string;
+  } | null;
+
+  // Actions
+  setPosts: (posts: Post[] | ((prev: Post[]) => Post[])) => void;
+  setNewPost: (post: PostFormData) => void;
+  setNewReply: (reply: PostFormData) => void;
+  setReplyMode: (mode: string | null) => void;
+  handleCreatePost: (onSuccess?: () => void) => Promise<void>;
+  handleReplySubmit: (postId: string) => Promise<void>;
+  handleReaction: (
+    postId: string,
+    pickerLabel: string,
+    isReply?: boolean,
+    replyId?: string
+  ) => Promise<void>;
+  showReactionPicker: (
+    postId: string,
+    isReply?: boolean,
+    replyId?: string
+  ) => void;
+  hideReactionPicker: () => void;
+  toggleReplies: (postId: string) => void;
+  loadNearbyPosts: () => Promise<void>;
+  handleCancelPost: () => void;
+}
+
+export const usePostManagement = ({
+  currentUserId,
+  location,
+}: UsePostManagementProps): UsePostManagementReturn => {
+  const [posts, setPosts] = useState<Post[]>([]);
+  const [newPost, setNewPost] = useState<PostFormData>({ content: "" });
+  const [newReply, setNewReply] = useState<PostFormData>({ content: "" });
+  const [expandedReplies, setExpandedReplies] = useState<Set<string>>(
+    new Set()
+  );
+  const [replyMode, setReplyMode] = useState<string | null>(null);
+  const [reactionPickerVisible, setReactionPickerVisible] = useState(false);
+  const [reactionPickerTarget, setReactionPickerTarget] = useState<{
+    postId: string;
+    isReply: boolean;
+    replyId?: string;
+  } | null>(null);
+
+  const handleCreatePost = useCallback(
+    async (onSuccess?: () => void) => {
+      if (!newPost.content.trim()) {
+        Alert.alert("エラー", "投稿内容を入力してください");
+        return;
+      }
+
+      if (!location) {
+        Alert.alert("エラー", "位置情報が取得できません");
+        return;
+      }
+
+      try {
+        console.log("投稿作成開始 - UserID:", currentUserId);
+
+        const postId = await savePostToFirestore({
+          text: newPost.content,
+          latitude: location.coords.latitude,
+          longitude: location.coords.longitude,
+          photoURL: undefined,
+        });
+
+        if (postId) {
+          console.log("投稿保存成功 - PostID:", postId);
+
+          const post: Post = {
+            id: postId,
+            content: newPost.content,
+            author: `User-${currentUserId.slice(-6)}`,
+            location: {
+              latitude: location.coords.latitude,
+              longitude: location.coords.longitude,
+            },
+            timestamp: new Date(),
+            parentPostID: undefined,
+            reactions: {},
+            reactionCounts: {},
+          };
+
+          setPosts((prev) => [post, ...prev]);
+          setNewPost({ content: "" });
+          Alert.alert("成功", "投稿が作成されました");
+          onSuccess?.(); // 成功時のコールバックを実行
+          return Promise.resolve();
+        } else {
+          Alert.alert("エラー", "投稿の保存に失敗しました");
+        }
+      } catch (error) {
+        console.error("投稿作成エラー:", error);
+        Alert.alert("エラー", "投稿の作成に失敗しました");
+      }
+    },
+    [newPost.content, location, currentUserId]
+  );
+
+  const handleReplySubmit = useCallback(
+    async (postId: string) => {
+      if (!newReply.content.trim()) {
+        Alert.alert("エラー", "返信内容を入力してください");
+        return;
+      }
+
+      if (!location) {
+        Alert.alert("エラー", "位置情報が取得できません");
+        return;
+      }
+
+      try {
+        console.log(
+          "返信作成開始 - UserID:",
+          currentUserId,
+          "ParentPostID:",
+          postId
+        );
+
+        const replyId = await savePostToFirestore({
+          text: newReply.content,
+          latitude: location.coords.latitude,
+          longitude: location.coords.longitude,
+          parentPostID: postId,
+          photoURL: undefined,
+        });
+
+        if (replyId) {
+          console.log("返信保存成功 - ReplyID:", replyId);
+
+          const reply: Reply = {
+            id: replyId,
+            content: newReply.content,
+            author: `User-${currentUserId.slice(-6)}`,
+            timestamp: new Date(),
+            reactions: {},
+            reactionCounts: {},
+          };
+
+          setPosts((prev) =>
+            prev.map((post) => {
+              if (post.id === postId) {
+                return {
+                  ...post,
+                  replies: [...(post.replies || []), reply],
+                };
+              }
+              return post;
+            })
+          );
+
+          setNewReply({ content: "" });
+          setReplyMode(null);
+          Alert.alert("成功", "返信が投稿されました");
+        } else {
+          Alert.alert("エラー", "返信の保存に失敗しました");
+        }
+      } catch (error) {
+        console.error("返信作成エラー:", error);
+        Alert.alert("エラー", "返信の作成に失敗しました");
+      }
+    },
+    [newReply.content, location, currentUserId]
+  );
+
+  const handleReaction = useCallback(
+    async (
+      postId: string,
+      pickerLabel: string,
+      isReply: boolean = false,
+      replyId?: string
+    ) => {
+      try {
+        console.log(
+          `リアクション処理開始 PostID=${postId}, Emoji=${pickerLabel}`
+        );
+
+        const success = await updatePostReaction(postId, pickerLabel);
+
+        if (!success) {
+          Alert.alert("エラー", "リアクションの更新に失敗しました");
+          return;
+        }
+
+        // ローカルの投稿リストも更新（UI即座更新のため）
+        setPosts((prev) =>
+          prev.map((post) => {
+            if (post.id === postId) {
+              const reactions = { ...(post.reactions || {}) };
+              const reactionCounts = { ...(post.reactionCounts || {}) };
+
+              const currentReaction = reactions[currentUserId];
+
+              if (currentReaction === pickerLabel) {
+                // 同じリアクションの場合は削除
+                delete reactions[currentUserId];
+                reactionCounts[pickerLabel] = Math.max(
+                  0,
+                  (reactionCounts[pickerLabel] || 0) - 1
+                );
+                if (reactionCounts[pickerLabel] === 0) {
+                  delete reactionCounts[pickerLabel];
+                }
+              } else {
+                // 異なるリアクションまたは新規の場合
+                if (currentReaction) {
+                  // 既存のリアクションを減らす
+                  reactionCounts[currentReaction] = Math.max(
+                    0,
+                    (reactionCounts[currentReaction] || 0) - 1
+                  );
+                  if (reactionCounts[currentReaction] === 0) {
+                    delete reactionCounts[currentReaction];
+                  }
+                }
+                // 新しいリアクションを追加
+                reactions[currentUserId] = pickerLabel;
+                reactionCounts[pickerLabel] =
+                  (reactionCounts[pickerLabel] || 0) + 1;
+              }
+
+              return {
+                ...post,
+                reactions,
+                reactionCounts,
+              };
+            }
+            return post;
+          })
+        );
+
+        // リアクション更新後、最新の投稿データを取得して同期
+        if (location) {
+          try {
+            console.log("リアクション後の投稿データ同期中...");
+            const updatedNearbyPosts = await getNearbyPosts(
+              location.coords.latitude,
+              location.coords.longitude,
+              1.0
+            );
+
+            if (updatedNearbyPosts.length > 0) {
+              const convertedPosts = updatedNearbyPosts.map((firestorePost) => {
+                const reactions: { [userID: string]: string } = {};
+                const reactionCounts: { [emoji: string]: number } = {};
+
+                if (
+                  firestorePost.reactions &&
+                  typeof firestorePost.reactions === "object"
+                ) {
+                  Object.entries(firestorePost.reactions).forEach(
+                    ([emoji, data]: [string, any]) => {
+                      if (data && data.userIds && Array.isArray(data.userIds)) {
+                        reactionCounts[emoji] =
+                          data.count || data.userIds.length;
+                        data.userIds.forEach((userId: string) => {
+                          reactions[userId] = emoji;
+                        });
+                      }
+                    }
+                  );
+                }
+
+                return {
+                  id: firestorePost.id,
+                  content: firestorePost.text,
+                  author: `User-${firestorePost.userID.slice(-6)}`,
+                  location: {
+                    latitude: firestorePost.coordinates.latitude,
+                    longitude: firestorePost.coordinates.longitude,
+                  },
+                  timestamp: firestorePost.timestamp,
+                  parentPostID: firestorePost.parentPostID,
+                  reactions: reactions,
+                  reactionCounts: reactionCounts,
+                  replies: [],
+                };
+              });
+
+              // 既存の投稿を更新（リアクション情報のみ）
+              setPosts((prevPosts) => {
+                const updatedPosts = [...prevPosts];
+
+                convertedPosts.forEach((newPost) => {
+                  const existingPostIndex = updatedPosts.findIndex(
+                    (p) => p.id === newPost.id
+                  );
+                  if (existingPostIndex >= 0) {
+                    updatedPosts[existingPostIndex] = {
+                      ...updatedPosts[existingPostIndex],
+                      reactions: newPost.reactions,
+                      reactionCounts: newPost.reactionCounts,
+                    };
+                  }
+                });
+
+                return updatedPosts;
+              });
+              console.log("リアクション後の同期完了");
+            }
+          } catch (syncError) {
+            console.error("リアクション後の同期エラー:", syncError);
+          }
+        }
+
+        console.log("リアクション処理完了");
+      } catch (error) {
+        console.error("リアクション処理エラー:", error);
+        Alert.alert("エラー", "リアクションの処理に失敗しました");
+      }
+    },
+    [currentUserId, location]
+  );
+
+  const loadNearbyPosts = useCallback(async () => {
+    if (!location) return;
+
+    try {
+      console.log("周辺投稿を取得中...");
+      const nearbyPosts = await getNearbyPosts(
+        location.coords.latitude,
+        location.coords.longitude,
+        1.0
+      );
+
+      if (nearbyPosts.length > 0) {
+        const convertedPosts = nearbyPosts.map((firestorePost) => {
+          const reactions: { [userID: string]: string } = {};
+          const reactionCounts: { [emoji: string]: number } = {};
+
+          if (
+            firestorePost.reactions &&
+            typeof firestorePost.reactions === "object"
+          ) {
+            Object.entries(firestorePost.reactions).forEach(
+              ([emoji, data]: [string, any]) => {
+                if (data && data.userIds && Array.isArray(data.userIds)) {
+                  reactionCounts[emoji] = data.count || data.userIds.length;
+                  data.userIds.forEach((userId: string) => {
+                    reactions[userId] = emoji;
+                  });
+                }
+              }
+            );
+          }
+
+          return {
+            id: firestorePost.id,
+            content: firestorePost.text,
+            author: `User-${firestorePost.userID.slice(-6)}`,
+            location: {
+              latitude: firestorePost.coordinates.latitude,
+              longitude: firestorePost.coordinates.longitude,
+            },
+            timestamp: firestorePost.timestamp,
+            parentPostID: firestorePost.parentPostID,
+            reactions: reactions,
+            reactionCounts: reactionCounts,
+            replies: [],
+          };
+        });
+
+        // 既存の投稿を更新または新しい投稿を追加
+        setPosts((prevPosts) => {
+          const updatedPosts = [...prevPosts];
+          let hasNewPosts = false;
+
+          convertedPosts.forEach((newPost) => {
+            const existingPostIndex = updatedPosts.findIndex(
+              (p) => p.id === newPost.id
+            );
+            if (existingPostIndex >= 0) {
+              updatedPosts[existingPostIndex] = {
+                ...updatedPosts[existingPostIndex],
+                reactions: newPost.reactions,
+                reactionCounts: newPost.reactionCounts,
+              };
+            } else {
+              updatedPosts.unshift(newPost);
+              hasNewPosts = true;
+            }
+          });
+
+          if (hasNewPosts) {
+            console.log(`新しい投稿が追加されました`);
+          }
+
+          return updatedPosts;
+        });
+      }
+    } catch (error) {
+      console.error("周辺投稿取得エラー:", error);
+    }
+  }, [location]);
+
+  const showReactionPicker = useCallback(
+    (postId: string, isReply: boolean = false, replyId?: string) => {
+      setReactionPickerTarget({ postId, isReply, replyId });
+      setReactionPickerVisible(true);
+    },
+    []
+  );
+
+  const hideReactionPicker = useCallback(() => {
+    setReactionPickerVisible(false);
+  }, []);
+
+  const toggleReplies = useCallback((postId: string) => {
+    setExpandedReplies((prev) => {
+      const newExpanded = new Set(prev);
+      if (newExpanded.has(postId)) {
+        newExpanded.delete(postId);
+      } else {
+        newExpanded.add(postId);
+      }
+      return newExpanded;
+    });
+  }, []);
+
+  const handleCancelPost = useCallback(() => {
+    setNewPost({ content: "" });
+  }, []);
+
+  return {
+    // State
+    posts,
+    newPost,
+    newReply,
+    expandedReplies,
+    replyMode,
+    reactionPickerVisible,
+    reactionPickerTarget,
+
+    // Actions
+    setPosts,
+    setNewPost,
+    setNewReply,
+    setReplyMode,
+    handleCreatePost,
+    handleReplySubmit,
+    handleReaction,
+    showReactionPicker,
+    hideReactionPicker,
+    toggleReplies,
+    loadNearbyPosts,
+    handleCancelPost,
+  };
+};

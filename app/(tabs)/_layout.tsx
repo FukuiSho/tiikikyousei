@@ -1,9 +1,7 @@
 import { Tabs } from "expo-router";
 import React from "react";
-import { Platform } from "react-native";
 
 import { HapticTab } from "@/components/HapticTab";
-import { IconSymbol } from "@/components/ui/IconSymbol";
 import TabBarBackground from "@/components/ui/TabBarBackground";
 import { Colors } from "@/constants/Colors";
 import { useColorScheme } from "@/hooks/useColorScheme";
@@ -18,31 +16,33 @@ export default function TabLayout() {
         headerShown: false,
         tabBarButton: HapticTab,
         tabBarBackground: TabBarBackground,
-        tabBarStyle: Platform.select({
-          ios: {
-            // Use a transparent background on iOS to show the blur effect
-            position: "absolute",
-          },
-          default: {},
-        }),
+        tabBarStyle: {
+          display: "none", // タブバーを完全に非表示
+        },
       }}
     >
       <Tabs.Screen
         name="index"
         options={{
-          title: "ホーム",
-          tabBarIcon: ({ color }) => (
-            <IconSymbol size={28} name="house.fill" color={color} />
-          ),
+          href: null, // タブナビゲーションから除外
         }}
       />
       <Tabs.Screen
         name="mypage"
         options={{
-          title: "マイページ",
-          tabBarIcon: ({ color }) => (
-            <IconSymbol size={28} name="person.fill" color={color} />
-          ),
+          href: null, // タブナビゲーションから除外
+        }}
+      />
+      <Tabs.Screen
+        name="history"
+        options={{
+          href: null, // タブナビゲーションから除外
+        }}
+      />
+      <Tabs.Screen
+        name="signup"
+        options={{
+          href: null, // タブナビゲーションから除外
         }}
       />
     </Tabs>

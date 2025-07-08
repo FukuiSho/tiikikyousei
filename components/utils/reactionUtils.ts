@@ -1,5 +1,24 @@
-import { Alert } from 'react-native';
-import { Post } from './types';
+import { Alert } from "react-native";
+import { Post } from "./types";
+
+// リアクション画像のマッピング
+export const reactionImages: { [key: string]: any } = {
+  "1": require("../../assets/images/face1.png"),
+  "2": require("../../assets/images/face2.png"),
+  "3": require("../../assets/images/face3.png"),
+  "4": require("../../assets/images/face4.png"),
+  "5": require("../../assets/images/face5.png"),
+  "6": require("../../assets/images/face6.png"),
+};
+
+// リアクション画像の安全な取得関数
+export const getReactionImage = (emoji: string) => {
+  if (reactionImages[emoji]) {
+    return reactionImages[emoji];
+  }
+  // フォールバック画像（最初の画像を使用）
+  return reactionImages["1"];
+};
 
 /**
  * 投稿にリアクションを追加/削除する関数（即時反映対応）
@@ -27,14 +46,20 @@ export const handleReaction = (
             if (currentReaction === emoji) {
               // 同じリアクションを削除
               delete reactions[currentUserId];
-              reactionCounts[emoji] = Math.max(0, (reactionCounts[emoji] || 0) - 1);
+              reactionCounts[emoji] = Math.max(
+                0,
+                (reactionCounts[emoji] || 0) - 1
+              );
               if (reactionCounts[emoji] === 0) {
                 delete reactionCounts[emoji];
               }
             } else {
               // 既存のリアクションを削除（あれば）
               if (currentReaction) {
-                reactionCounts[currentReaction] = Math.max(0, (reactionCounts[currentReaction] || 0) - 1);
+                reactionCounts[currentReaction] = Math.max(
+                  0,
+                  (reactionCounts[currentReaction] || 0) - 1
+                );
                 if (reactionCounts[currentReaction] === 0) {
                   delete reactionCounts[currentReaction];
                 }
@@ -73,7 +98,10 @@ export const handleReaction = (
         } else {
           // 既存のリアクションを削除（あれば）
           if (currentReaction) {
-            reactionCounts[currentReaction] = Math.max(0, (reactionCounts[currentReaction] || 0) - 1);
+            reactionCounts[currentReaction] = Math.max(
+              0,
+              (reactionCounts[currentReaction] || 0) - 1
+            );
             if (reactionCounts[currentReaction] === 0) {
               delete reactionCounts[currentReaction];
             }
@@ -102,7 +130,12 @@ export const handleReaction = (
  */
 export const showReactionPicker = (
   postId: string,
-  onReactionSelect: (postId: string, emoji: string, isReply?: boolean, replyId?: string) => void,
+  onReactionSelect: (
+    postId: string,
+    emoji: string,
+    isReply?: boolean,
+    replyId?: string
+  ) => void,
   isReply: boolean = false,
   replyId?: string
 ): void => {
@@ -115,7 +148,7 @@ export const showReactionPicker = (
           // 即時反映：リアクション選択後すぐに処理を実行
           onReactionSelect(postId, emoji, isReply, replyId);
         } catch (error) {
-          console.error('リアクション選択処理でエラーが発生しました:', error);
+          console.error("リアクション選択処理でエラーが発生しました:", error);
           Alert.alert("エラー", "リアクション処理中にエラーが発生しました");
         }
       },
@@ -129,7 +162,7 @@ export const showReactionPicker = (
     // 即時反映：Alertを表示するが、選択後は即座にUIに反映される
     Alert.alert("リアクションを選択", "", buttons, { cancelable: true });
   } catch (error) {
-    console.error('リアクションピッカー表示でエラーが発生しました:', error);
+    console.error("リアクションピッカー表示でエラーが発生しました:", error);
     Alert.alert("エラー", "リアクション選択画面の表示中にエラーが発生しました");
   }
 };

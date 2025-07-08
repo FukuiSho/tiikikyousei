@@ -59,8 +59,14 @@ export const PostModalComponent: React.FC<PostModalComponentProps> = ({
           {/* モーダル本体 */}
           <ScrollView
             style={styles.modalBody}
+            contentContainerStyle={{
+              flexGrow: 1,
+              paddingBottom: 20,
+            }}
             keyboardShouldPersistTaps="handled"
-            showsVerticalScrollIndicator={false}
+            showsVerticalScrollIndicator={true}
+            scrollEnabled={true}
+            bounces={true}
           >
             <View style={styles.inputGroup}>
               <Text style={styles.label}>内容（任意）</Text>

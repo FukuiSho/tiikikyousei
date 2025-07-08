@@ -1,3 +1,4 @@
+import { useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
 import { Alert } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -8,7 +9,6 @@ import {
   UserProfileUpdateData,
 } from "../../components/utils/types";
 import {
-  getEncounterHistory,
   getUserOneMessage,
   getUserProfile,
   saveUserProfile,
@@ -17,6 +17,7 @@ import {
 import { getPersistentUserId } from "../../services/userService";
 
 export default function MyPageScreen() {
+  const router = useRouter();
   const [currentUserId, setCurrentUserId] = useState<string>("");
   const [currentOneMessage, setCurrentOneMessage] = useState<string>("");
   const [editingOneMessage, setEditingOneMessage] = useState<string>("");
@@ -31,6 +32,7 @@ export default function MyPageScreen() {
       bloodType: "",
       hometown: "",
       birthday: undefined,
+      zodiacSign: "", // 星座フィールドを追加
       worries: "",
       selfIntroduction: "",
       tags: [],
@@ -40,10 +42,6 @@ export default function MyPageScreen() {
   const [savingProfile, setSavingProfile] = useState(false);
   const [profileTabIndex, setProfileTabIndex] = useState(0); // 0: 基本情報, 1: 詳細情報
   const [tagInput, setTagInput] = useState("");
-
-  // すれ違い履歴用のstate
-  const [encounterHistory, setEncounterHistory] = useState<any[]>([]);
-  const [loadingHistory, setLoadingHistory] = useState(false);
 
   useEffect(() => {
     const initializeData = async () => {
@@ -63,9 +61,6 @@ export default function MyPageScreen() {
 
       // プロフィール情報を読み込み
       await loadUserProfile(userId);
-
-      // すれ違い履歴を取得
-      await fetchEncounterHistory(userId);
     };
 
     initializeData();
@@ -123,6 +118,7 @@ export default function MyPageScreen() {
           bloodType: profile.bloodType || "",
           hometown: profile.hometown || "",
           birthday: profile.birthday || undefined,
+          zodiacSign: profile.zodiacSign || "", // 星座フィールドを追加
           worries: profile.worries || "",
           selfIntroduction: profile.selfIntroduction || "",
           tags: profile.tags || [],
@@ -175,6 +171,7 @@ export default function MyPageScreen() {
         bloodType: userProfile.bloodType || "",
         hometown: userProfile.hometown || "",
         birthday: userProfile.birthday || undefined,
+        zodiacSign: userProfile.zodiacSign || "", // 星座フィールドを追加
         worries: userProfile.worries || "",
         selfIntroduction: userProfile.selfIntroduction || "",
         tags: userProfile.tags || [],
@@ -200,24 +197,6 @@ export default function MyPageScreen() {
       ...profileFormData,
       tags: profileFormData.tags?.filter((tag) => tag !== tagToRemove) || [],
     });
-  };
-
-  // すれ違い履歴を取得する関数
-  const fetchEncounterHistory = async (userId: string) => {
-    if (!userId) return;
-
-    setLoadingHistory(true);
-    try {
-      console.log("すれ違い履歴を取得中...");
-      const history = await getEncounterHistory(userId);
-      setEncounterHistory(history);
-      console.log(`すれ違い履歴を${history.length}件取得しました`);
-    } catch (error) {
-      console.error("すれ違い履歴取得エラー:", error);
-      Alert.alert("エラー", "すれ違い履歴の取得に失敗しました");
-    } finally {
-      setLoadingHistory(false);
-    }
   };
 
   // コールバック関数を定義
@@ -260,11 +239,18 @@ export default function MyPageScreen() {
     }
   };
 
+  // ホーム画面に戻る関数
+  const handleHomeNavigation = () => {
+    router.push("/(tabs)");
+  };
+
   // UserProfileにuserIdとdisplayNameを追加したバージョンを作成
   const enhancedUserProfile: UserProfile = {
     ...userProfile,
     userId: currentUserId,
-    displayName: currentUserId ? `User-${currentUserId.slice(-6)}` : "ユーザー名未設定",
+    displayName: currentUserId
+      ? `User-${currentUserId.slice(-6)}`
+      : "ユーザー名未設定",
   };
 
   return (
@@ -290,6 +276,7 @@ export default function MyPageScreen() {
         onTagInputChange={handleTagInputChange}
         onTagAdd={addTag}
         onTagRemove={handleTagRemove}
+        onHomeNavigation={handleHomeNavigation}
       />
     </SafeAreaView>
   );

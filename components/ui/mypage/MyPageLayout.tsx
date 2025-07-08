@@ -1,9 +1,263 @@
-import React from 'react';
-import { View, Text, ScrollView, TouchableOpacity, TextInput } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
-import { UserProfile, UserProfileUpdateData } from '../../utils/types';
-import { styles } from '../../utils/styles';
+import { Ionicons } from "@expo/vector-icons";
+import React, { useState } from "react";
+import {
+  ScrollView,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { styles } from "../../utils/styles";
+import {
+  BIRTH_DAYS,
+  BIRTH_MONTHS,
+  BIRTH_YEARS,
+  BLOOD_TYPE_OPTIONS,
+  GENDER_OPTIONS,
+  PREFECTURE_OPTIONS,
+  UserProfile,
+  UserProfileUpdateData,
+  ZODIAC_SIGNS,
+} from "../../utils/types";
+
+// オプション選択コンポーネント（性別・血液型用）
+interface OptionSelectorProps {
+  options: string[];
+  selectedValue: string;
+  onSelect: (value: string) => void;
+}
+
+const OptionSelector: React.FC<OptionSelectorProps> = ({
+  options,
+  selectedValue,
+  onSelect,
+}) => {
+  return (
+    <View style={styles.optionContainer}>
+      {options.map((option) => (
+        <TouchableOpacity
+          key={option}
+          style={[
+            styles.optionButton,
+            selectedValue === option && styles.optionButtonSelected,
+          ]}
+          onPress={() => onSelect(option)}
+        >
+          <Text
+            style={[
+              styles.optionText,
+              selectedValue === option && styles.optionTextSelected,
+            ]}
+          >
+            {option}
+          </Text>
+        </TouchableOpacity>
+      ))}
+    </View>
+  );
+};
+
+// ドロップダウン選択コンポーネント（出身地・星座用）
+interface DropdownSelectorProps {
+  options: string[];
+  selectedValue: string;
+  placeholder: string;
+  onSelect: (value: string) => void;
+}
+
+const DropdownSelector: React.FC<DropdownSelectorProps> = ({
+  options,
+  selectedValue,
+  placeholder,
+  onSelect,
+}) => {
+  const [isOpen, setIsOpen] = useState(false);
+
+  return (
+    <View style={styles.dropdownContainer}>
+      <TouchableOpacity
+        style={styles.dropdownButton}
+        onPress={() => setIsOpen(!isOpen)}
+      >
+        <Text style={styles.dropdownButtonText}>
+          {selectedValue || placeholder}
+        </Text>
+        <Ionicons
+          name={isOpen ? "chevron-up" : "chevron-down"}
+          size={20}
+          color="#666"
+        />
+      </TouchableOpacity>
+
+      {isOpen && (
+        <ScrollView style={styles.dropdownList} nestedScrollEnabled>
+          {options.map((option) => (
+            <TouchableOpacity
+              key={option}
+              style={[
+                styles.dropdownItem,
+                selectedValue === option && styles.dropdownItemSelected,
+              ]}
+              onPress={() => {
+                onSelect(option);
+                setIsOpen(false);
+              }}
+            >
+              <Text
+                style={[
+                  styles.dropdownItemText,
+                  selectedValue === option && styles.dropdownItemTextSelected,
+                ]}
+              >
+                {option}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      )}
+    </View>
+  );
+};
+
+// 生年月日選択コンポーネント
+interface DateSelectorProps {
+  selectedDate?: Date;
+  onDateChange: (date: Date) => void;
+}
+
+const DateSelector: React.FC<DateSelectorProps> = ({
+  selectedDate,
+  onDateChange,
+}) => {
+  const [selectedYear, setSelectedYear] = useState(
+    selectedDate?.getFullYear()?.toString() || ""
+  );
+  const [selectedMonth, setSelectedMonth] = useState(
+    selectedDate ? `${selectedDate.getMonth() + 1}月` : ""
+  );
+  const [selectedDay, setSelectedDay] = useState(
+    selectedDate ? `${selectedDate.getDate()}日` : ""
+  );
+
+  const [yearOpen, setYearOpen] = useState(false);
+  const [monthOpen, setMonthOpen] = useState(false);
+  const [dayOpen, setDayOpen] = useState(false);
+
+  const handleDatePartChange = (year: string, month: string, day: string) => {
+    if (year && month && day) {
+      const yearNum = parseInt(year);
+      const monthNum = parseInt(month.replace("月", "")) - 1;
+      const dayNum = parseInt(day.replace("日", ""));
+      const newDate = new Date(yearNum, monthNum, dayNum);
+      onDateChange(newDate);
+    }
+  };
+
+  const handleYearSelect = (year: string) => {
+    setSelectedYear(year);
+    handleDatePartChange(year, selectedMonth, selectedDay);
+    setYearOpen(false);
+  };
+
+  const handleMonthSelect = (month: string) => {
+    setSelectedMonth(month);
+    handleDatePartChange(selectedYear, month, selectedDay);
+    setMonthOpen(false);
+  };
+
+  const handleDaySelect = (day: string) => {
+    setSelectedDay(day);
+    handleDatePartChange(selectedYear, selectedMonth, day);
+    setDayOpen(false);
+  };
+
+  return (
+    <View style={styles.datePickerContainer}>
+      {/* 年選択 */}
+      <View style={{ flex: 1 }}>
+        <TouchableOpacity
+          style={styles.datePickerButton}
+          onPress={() => setYearOpen(!yearOpen)}
+        >
+          <Text style={styles.datePickerButtonText}>
+            {selectedYear || "年"}
+          </Text>
+        </TouchableOpacity>
+        {yearOpen && (
+          <ScrollView
+            style={[styles.dropdownList, { maxHeight: 150 }]}
+            nestedScrollEnabled
+          >
+            {BIRTH_YEARS.map((year) => (
+              <TouchableOpacity
+                key={year}
+                style={styles.dropdownItem}
+                onPress={() => handleYearSelect(year)}
+              >
+                <Text style={styles.dropdownItemText}>{year}</Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        )}
+      </View>
+
+      {/* 月選択 */}
+      <View style={{ flex: 1 }}>
+        <TouchableOpacity
+          style={styles.datePickerButton}
+          onPress={() => setMonthOpen(!monthOpen)}
+        >
+          <Text style={styles.datePickerButtonText}>
+            {selectedMonth || "月"}
+          </Text>
+        </TouchableOpacity>
+        {monthOpen && (
+          <ScrollView
+            style={[styles.dropdownList, { maxHeight: 150 }]}
+            nestedScrollEnabled
+          >
+            {BIRTH_MONTHS.map((month) => (
+              <TouchableOpacity
+                key={month}
+                style={styles.dropdownItem}
+                onPress={() => handleMonthSelect(month)}
+              >
+                <Text style={styles.dropdownItemText}>{month}</Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        )}
+      </View>
+
+      {/* 日選択 */}
+      <View style={{ flex: 1 }}>
+        <TouchableOpacity
+          style={styles.datePickerButton}
+          onPress={() => setDayOpen(!dayOpen)}
+        >
+          <Text style={styles.datePickerButtonText}>{selectedDay || "日"}</Text>
+        </TouchableOpacity>
+        {dayOpen && (
+          <ScrollView
+            style={[styles.dropdownList, { maxHeight: 150 }]}
+            nestedScrollEnabled
+          >
+            {BIRTH_DAYS.map((day) => (
+              <TouchableOpacity
+                key={day}
+                style={styles.dropdownItem}
+                onPress={() => handleDaySelect(day)}
+              >
+                <Text style={styles.dropdownItemText}>{day}</Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        )}
+      </View>
+    </View>
+  );
+};
 
 interface MyPageLayoutProps {
   userProfile: UserProfile | null;
@@ -26,6 +280,7 @@ interface MyPageLayoutProps {
   onTagInputChange: (input: string) => void;
   onTagAdd: () => void;
   onTagRemove: (index: number) => void;
+  onHomeNavigation: () => void; // ホーム画面への遷移関数
 }
 
 export const MyPageLayout: React.FC<MyPageLayoutProps> = ({
@@ -49,12 +304,20 @@ export const MyPageLayout: React.FC<MyPageLayoutProps> = ({
   onTagInputChange,
   onTagAdd,
   onTagRemove,
+  onHomeNavigation,
 }) => {
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView style={{ flex: 1 }}>
         {/* ヘッダー部分 */}
         <View style={styles.headerSection}>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={onHomeNavigation}
+          >
+            <Ionicons name="arrow-back" size={24} color="#4A90E2" />
+            <Text style={styles.backButtonText}>ホームに戻る</Text>
+          </TouchableOpacity>
           <Text style={styles.headerTitle}>マイページ</Text>
         </View>
 
@@ -66,9 +329,11 @@ export const MyPageLayout: React.FC<MyPageLayoutProps> = ({
             </View>
             <View style={styles.profileInfo}>
               <Text style={styles.profileName}>
-                {userProfile?.displayName || 'ユーザー名未設定'}
+                {userProfile?.displayName || "ユーザー名未設定"}
               </Text>
-              <Text style={styles.profileId}>ID: {userProfile?.userId || '未設定'}</Text>
+              <Text style={styles.profileId}>
+                ID: {userProfile?.userId || "未設定"}
+              </Text>
             </View>
           </View>
 
@@ -80,14 +345,14 @@ export const MyPageLayout: React.FC<MyPageLayoutProps> = ({
                 onPress={() => onMessageEdit(!isEditingMessage)}
                 disabled={savingMessage}
               >
-                <Ionicons 
-                  name={isEditingMessage ? "close" : "create"} 
-                  size={20} 
-                  color="#4A90E2" 
+                <Ionicons
+                  name={isEditingMessage ? "close" : "create"}
+                  size={20}
+                  color="#4A90E2"
                 />
               </TouchableOpacity>
             </View>
-            
+
             {isEditingMessage ? (
               <View>
                 <TextInput
@@ -104,13 +369,13 @@ export const MyPageLayout: React.FC<MyPageLayoutProps> = ({
                   disabled={savingMessage}
                 >
                   <Text style={styles.saveButtonText}>
-                    {savingMessage ? '保存中...' : '保存'}
+                    {savingMessage ? "保存中..." : "保存"}
                   </Text>
                 </TouchableOpacity>
               </View>
             ) : (
               <Text style={styles.messageText}>
-                {currentOneMessage || '一言メッセージを設定しましょう'}
+                {currentOneMessage || "一言メッセージを設定しましょう"}
               </Text>
             )}
           </View>
@@ -122,7 +387,12 @@ export const MyPageLayout: React.FC<MyPageLayoutProps> = ({
             style={[styles.tab, profileTabIndex === 0 && styles.activeTab]}
             onPress={() => onTabChange(0)}
           >
-            <Text style={[styles.tabText, profileTabIndex === 0 && styles.activeTabText]}>
+            <Text
+              style={[
+                styles.tabText,
+                profileTabIndex === 0 && styles.activeTabText,
+              ]}
+            >
               基本情報
             </Text>
           </TouchableOpacity>
@@ -130,7 +400,12 @@ export const MyPageLayout: React.FC<MyPageLayoutProps> = ({
             style={[styles.tab, profileTabIndex === 1 && styles.activeTab]}
             onPress={() => onTabChange(1)}
           >
-            <Text style={[styles.tabText, profileTabIndex === 1 && styles.activeTabText]}>
+            <Text
+              style={[
+                styles.tabText,
+                profileTabIndex === 1 && styles.activeTabText,
+              ]}
+            >
               詳細情報
             </Text>
           </TouchableOpacity>
@@ -164,10 +439,10 @@ export const MyPageLayout: React.FC<MyPageLayoutProps> = ({
                   onPress={() => onProfileEdit(!isEditingProfile)}
                   disabled={savingProfile}
                 >
-                  <Ionicons 
-                    name={isEditingProfile ? "close" : "create"} 
-                    size={20} 
-                    color="#4A90E2" 
+                  <Ionicons
+                    name={isEditingProfile ? "close" : "create"}
+                    size={20}
+                    color="#4A90E2"
                   />
                 </TouchableOpacity>
               </View>
@@ -178,33 +453,61 @@ export const MyPageLayout: React.FC<MyPageLayoutProps> = ({
                   {/* 性別 */}
                   <View style={styles.formField}>
                     <Text style={styles.fieldLabel}>性別</Text>
-                    <TextInput
-                      style={styles.textInput}
-                      value={profileFormData.gender}
-                      onChangeText={(text) => onProfileFormChange({ gender: text })}
-                      placeholder="性別を入力"
+                    <OptionSelector
+                      options={GENDER_OPTIONS}
+                      selectedValue={profileFormData.gender || ""}
+                      onSelect={(value) =>
+                        onProfileFormChange({ gender: value })
+                      }
                     />
                   </View>
 
                   {/* 血液型 */}
                   <View style={styles.formField}>
                     <Text style={styles.fieldLabel}>血液型</Text>
-                    <TextInput
-                      style={styles.textInput}
-                      value={profileFormData.bloodType}
-                      onChangeText={(text) => onProfileFormChange({ bloodType: text })}
-                      placeholder="血液型を入力"
+                    <OptionSelector
+                      options={BLOOD_TYPE_OPTIONS}
+                      selectedValue={profileFormData.bloodType || ""}
+                      onSelect={(value) =>
+                        onProfileFormChange({ bloodType: value })
+                      }
+                    />
+                  </View>
+
+                  {/* 生年月日 */}
+                  <View style={styles.formField}>
+                    <Text style={styles.fieldLabel}>生年月日</Text>
+                    <DateSelector
+                      selectedDate={profileFormData.birthday}
+                      onDateChange={(date) =>
+                        onProfileFormChange({ birthday: date })
+                      }
                     />
                   </View>
 
                   {/* 出身地 */}
                   <View style={styles.formField}>
                     <Text style={styles.fieldLabel}>出身地</Text>
-                    <TextInput
-                      style={styles.textInput}
-                      value={profileFormData.hometown}
-                      onChangeText={(text) => onProfileFormChange({ hometown: text })}
-                      placeholder="出身地を入力"
+                    <DropdownSelector
+                      options={PREFECTURE_OPTIONS}
+                      selectedValue={profileFormData.hometown || ""}
+                      placeholder="出身地を選択"
+                      onSelect={(value) =>
+                        onProfileFormChange({ hometown: value })
+                      }
+                    />
+                  </View>
+
+                  {/* 星座 */}
+                  <View style={styles.formField}>
+                    <Text style={styles.fieldLabel}>星座</Text>
+                    <DropdownSelector
+                      options={ZODIAC_SIGNS}
+                      selectedValue={profileFormData.zodiacSign || ""}
+                      placeholder="星座を選択"
+                      onSelect={(value) =>
+                        onProfileFormChange({ zodiacSign: value })
+                      }
                     />
                   </View>
 
@@ -214,7 +517,9 @@ export const MyPageLayout: React.FC<MyPageLayoutProps> = ({
                     <TextInput
                       style={[styles.textInput, styles.multilineInput]}
                       value={profileFormData.worries}
-                      onChangeText={(text) => onProfileFormChange({ worries: text })}
+                      onChangeText={(text) =>
+                        onProfileFormChange({ worries: text })
+                      }
                       placeholder="悩みを入力"
                       multiline
                     />
@@ -226,7 +531,9 @@ export const MyPageLayout: React.FC<MyPageLayoutProps> = ({
                     <TextInput
                       style={[styles.textInput, styles.multilineInput]}
                       value={profileFormData.selfIntroduction}
-                      onChangeText={(text) => onProfileFormChange({ selfIntroduction: text })}
+                      onChangeText={(text) =>
+                        onProfileFormChange({ selfIntroduction: text })
+                      }
                       placeholder="自己紹介を入力"
                       multiline
                     />
@@ -242,11 +549,14 @@ export const MyPageLayout: React.FC<MyPageLayoutProps> = ({
                         onChangeText={onTagInputChange}
                         placeholder="タグを追加"
                       />
-                      <TouchableOpacity style={styles.addTagButton} onPress={onTagAdd}>
+                      <TouchableOpacity
+                        style={styles.addTagButton}
+                        onPress={onTagAdd}
+                      >
                         <Ionicons name="add" size={20} color="white" />
                       </TouchableOpacity>
                     </View>
-                    
+
                     <View style={styles.tagContainer}>
                       {profileFormData.tags.map((tag, index) => (
                         <View key={index} style={styles.tag}>
@@ -268,7 +578,7 @@ export const MyPageLayout: React.FC<MyPageLayoutProps> = ({
                     disabled={savingProfile}
                   >
                     <Text style={styles.saveButtonText}>
-                      {savingProfile ? '保存中...' : 'プロフィールを保存'}
+                      {savingProfile ? "保存中..." : "プロフィールを保存"}
                     </Text>
                   </TouchableOpacity>
                 </View>
@@ -278,38 +588,54 @@ export const MyPageLayout: React.FC<MyPageLayoutProps> = ({
                   <View style={styles.profileField}>
                     <Text style={styles.fieldLabel}>性別</Text>
                     <Text style={styles.fieldValue}>
-                      {userProfile?.gender || '未設定'}
+                      {userProfile?.gender || "未設定"}
                     </Text>
                   </View>
-                  
+
                   <View style={styles.profileField}>
                     <Text style={styles.fieldLabel}>血液型</Text>
                     <Text style={styles.fieldValue}>
-                      {userProfile?.bloodType || '未設定'}
+                      {userProfile?.bloodType || "未設定"}
                     </Text>
                   </View>
-                  
+
+                  <View style={styles.profileField}>
+                    <Text style={styles.fieldLabel}>生年月日</Text>
+                    <Text style={styles.fieldValue}>
+                      {userProfile?.birthday
+                        ? `${userProfile.birthday.getFullYear()}年${userProfile.birthday.getMonth() + 1}月${userProfile.birthday.getDate()}日`
+                        : "未設定"}
+                    </Text>
+                  </View>
+
                   <View style={styles.profileField}>
                     <Text style={styles.fieldLabel}>出身地</Text>
                     <Text style={styles.fieldValue}>
-                      {userProfile?.hometown || '未設定'}
+                      {userProfile?.hometown || "未設定"}
                     </Text>
                   </View>
-                  
+
+                  <View style={styles.profileField}>
+                    <Text style={styles.fieldLabel}>星座</Text>
+                    <Text style={styles.fieldValue}>
+                      {userProfile?.zodiacSign || "未設定"}
+                    </Text>
+                  </View>
+
                   <View style={styles.profileField}>
                     <Text style={styles.fieldLabel}>悩み</Text>
                     <Text style={styles.fieldValue}>
-                      {userProfile?.worries || '未設定'}
+                      {userProfile?.worries || "未設定"}
                     </Text>
                   </View>
-                  
+
                   <View style={styles.profileField}>
                     <Text style={styles.fieldLabel}>自己紹介</Text>
                     <Text style={styles.fieldValue}>
-                      {userProfile?.selfIntroduction || '未設定'}
+                      {userProfile?.selfIntroduction || "未設定"}
                     </Text>
                   </View>
-                  
+
                   <View style={styles.profileField}>
                     <Text style={styles.fieldLabel}>興味・趣味タグ</Text>
                     <View style={styles.tagContainer}>

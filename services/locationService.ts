@@ -1,3 +1,22 @@
+/*
+ * ================================================
+ * 📍 Location Service - 位置情報管理システム
+ * ================================================
+ *
+ * このファイルは位置情報の取得、保存、すれ違い検出、
+ * プロフィール管理などの機能を提供します。
+ *
+ * 主な機能:
+ * - 📍 GPS位置情報の取得と保存
+ * - 👥 ユーザー間のすれ違い検出
+ * - 📝 プロフィール情報の管理
+ * - 💬 一言メッセージの管理
+ * - 📊 すれ違い統計の取得
+ *
+ * @author Community App Team
+ * @version 1.0.0
+ */
+
 import * as Location from "expo-location";
 import {
   collection,
@@ -12,6 +31,10 @@ import {
 } from "firebase/firestore";
 import { db } from "../firebase.config";
 
+// ================================================
+// 🔧 ユーティリティ関数群
+// ================================================
+
 // ユーザーIDを正規化する関数（user_プレフィックスの重複を防ぐ）
 const normalizeUserId = (userId: string): string => {
   // user_プレフィックスがすでにある場合は除去
@@ -25,7 +48,14 @@ const generateDocumentId = (userId: string): string => {
   return `user_${cleanId}`;
 };
 
-// 位置情報データの型定義
+// ================================================
+// 📄 型定義 - データ構造の定義
+// ================================================
+
+/**
+ * ユーザー位置情報の基本データ構造
+ * Firestoreの'users'コレクションで使用
+ */
 export interface Users {
   id: string; // ID（仮のメールアドレス）
   username: string; // ユーザー名
@@ -80,6 +110,7 @@ export interface UserProfile {
   bloodType?: string; // 血液型
   hometown?: string; // 出身地
   birthday?: Date; // 誕生日
+  zodiacSign?: string; // 星座
   worries?: string; // 悩み
   selfIntroduction?: string; // 自己紹介
   tags?: string[]; // タグ（趣味、特技など）
@@ -87,32 +118,56 @@ export interface UserProfile {
   updatedAt: Date; // 更新日時
 }
 
+// ==============================================
 // プロフィール更新用の型（部分更新対応）
+// ==============================================
 export interface UserProfileUpdateData {
-  gender?: string;
-  bloodType?: string;
-  hometown?: string;
-  birthday?: Date;
-  worries?: string;
-  selfIntroduction?: string;
-  tags?: string[];
+  gender?: string; // 性別
+  bloodType?: string; // 血液型
+  hometown?: string; // 出身地
+  birthday?: Date; // 誕生日
+  zodiacSign?: string; // 星座
+  worries?: string; // 悩み・相談したいこと
+  selfIntroduction?: string; // 自己紹介文
+  tags?: string[]; // タグ（趣味、特技、興味など）
 }
 
-// 現在地を取得してFirestoreに保存
+// ==============================================
+// 🌍 位置情報管理関数群
+// ==============================================
+
+/**
+ * 現在地を取得してFirestoreに保存する関数
+ *
+ * @param userId - ユーザーID
+ * @param shouldDetectEncounters - すれ違い検出を実行するかどうか
+ * @returns Promise<Users | null> - 保存されたユーザー情報またはnull
+ *
+ * 機能:
+ * - 位置情報の許可確認
+ * - GPS位置情報の取得（複数回試行）
+ * - Firestoreへの位置情報保存
+ * - すれ違い検出（オプション）
+ */
 export const saveLocationToFirestore = async (
-  userId: string
+  userId: string,
+  shouldDetectEncounters: boolean = false
 ): Promise<Users | null> => {
   try {
     console.log("saveLocationToFirestore開始 - userId:", userId);
 
-    // Firebase接続確認
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // 📡 Firebase接続確認
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     if (!db) {
       console.error("Firebase Firestoreが初期化されていません");
       return null;
     }
     console.log("Firebase Firestore接続確認OK");
 
-    // 位置情報の許可を確認
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // 📍 位置情報の許可を確認
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     console.log("位置情報の許可状態を確認中...");
     const { status } = await Location.requestForegroundPermissionsAsync();
     console.log("位置情報の許可状態:", status);
@@ -122,7 +177,9 @@ export const saveLocationToFirestore = async (
       return null;
     }
 
-    // 現在地を取得（複数回試行）
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // 🎯 現在地を取得（複数回試行で確実性を向上）
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     console.log("現在地を取得中...");
     let location;
     let attemptCount = 0;
@@ -197,7 +254,11 @@ export const saveLocationToFirestore = async (
     if (!location) {
       console.error("位置情報の取得に失敗しました");
       return null;
-    } // 住所を取得（オプション）
+    }
+
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // 🏠 住所を取得（オプション - リバースジオコーディング）
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     console.log("住所を取得中...");
     let address = "";
     try {
@@ -213,7 +274,11 @@ export const saveLocationToFirestore = async (
       }
     } catch (error) {
       console.warn("住所の取得に失敗しました:", error);
-    } // Firestoreに保存するデータ（初期encounters設定付き）
+    }
+
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // 💾 Firestoreに保存するデータを準備
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     const locationData: Omit<Users, "id"> = {
       username: `User ${userId}`, // デフォルトのユーザー名
       icon: "https://example.com/images/default.jpg", // デフォルトアイコン
@@ -302,15 +367,20 @@ export const saveLocationToFirestore = async (
       documentId
     );
 
-    // すれ違い検出を実行
-    console.log("すれ違い検出を開始します...");
-    const encounters = await detectAndRecordEncounters(userId, {
-      latitude: location.coords.latitude,
-      longitude: location.coords.longitude,
-    });
+    // すれ違い検出を実行（フラグで制御）
+    let encounters: EncounterWithUserInfo[] = [];
+    if (shouldDetectEncounters) {
+      console.log("すれ違い検出を開始します...");
+      encounters = await detectAndRecordEncounters(userId, {
+        latitude: location.coords.latitude,
+        longitude: location.coords.longitude,
+      });
 
-    if (encounters.length > 0) {
-      console.log(`${encounters.length}件のすれ違いを検出しました`);
+      if (encounters.length > 0) {
+        console.log(`${encounters.length}件のすれ違いを検出しました`);
+      } else {
+        console.log("新しいすれ違いは検出されませんでした");
+      }
     }
     return {
       id: documentId,
@@ -331,7 +401,15 @@ export const saveLocationToFirestore = async (
   }
 };
 
-// Firestoreから最新の位置情報を取得
+// ==============================================
+// 📊 位置情報取得関数群
+// ==============================================
+
+/**
+ * Firestoreから最新の位置情報を取得
+ * @param limitCount - 取得する位置情報の上限数
+ * @returns Promise<Users[]> - ユーザー位置情報の配列
+ */
 export const getLatestLocationsFromFirestore = async (
   limitCount: number = 10
 ): Promise<Users[]> => {
@@ -492,7 +570,22 @@ export const calculateDistance = (
   return R * c; // 距離（メートル）
 };
 
-// 近くのユーザーを検出してすれ違い情報を記録（20分間隔制限付き）
+// ==============================================
+// 👥 すれ違い検出・記録関数群
+// ==============================================
+
+/**
+ * 近くのユーザーを検出してすれ違い情報を記録
+ * @param myUserId - 自分のユーザーID
+ * @param myLocation - 自分の現在位置
+ * @param encounterThreshold - すれ違い検出の距離閾値（メートル）
+ * @returns Promise<EncounterWithUserInfo[]> - 検出されたすれ違い情報
+ *
+ * 機能:
+ * - 20分間隔制限付きで重複すれ違いを防止
+ * - 相互記録（自分と相手の両方に記録）
+ * - 距離計算による正確な検出
+ */
 export const detectAndRecordEncounters = async (
   myUserId: string,
   myLocation: { latitude: number; longitude: number },
@@ -539,15 +632,15 @@ export const detectAndRecordEncounters = async (
           `すれ違い検出: ${otherUser.username} (${distance.toFixed(2)}m)`
         );
 
-        // 重複チェック（過去60分以内に同じユーザーとのすれ違いがないか）
+        // 重複チェック（過去20分以内に同じユーザーとのすれ違いがないか）
         const isDuplicate = await checkRecentEncounterInUser(
           myUserId,
           otherUser.id,
-          60
+          20 // 20分間隔に変更
         );
 
         if (!isDuplicate) {
-          // 60分以内の重複がない場合は記録
+          // 20分以内の重複がない場合は記録
           const encounterLocation = {
             latitude:
               (myLocation.latitude + otherUser.coordinates.latitude) / 2,
@@ -1254,6 +1347,7 @@ export const saveUserProfile = async (
         gender: cleanedProfileData.gender || "",
         bloodType: cleanedProfileData.bloodType || "",
         hometown: cleanedProfileData.hometown || "",
+        zodiacSign: cleanedProfileData.zodiacSign || "", // 星座フィールドを追加
         worries: cleanedProfileData.worries || "",
         selfIntroduction: cleanedProfileData.selfIntroduction || "",
         tags: cleanedProfileData.tags || [],
@@ -1303,6 +1397,7 @@ export const getUserProfile = async (
         bloodType: data.bloodType || "",
         hometown: data.hometown || "",
         birthday: data.birthday?.toDate?.() || undefined,
+        zodiacSign: data.zodiacSign || "", // 星座フィールドを追加
         worries: data.worries || "",
         selfIntroduction: data.selfIntroduction || "",
         tags: data.tags || [],
@@ -1490,5 +1585,31 @@ export const updateUserOneMessage = async (
   } catch (error) {
     console.error("一言メッセージの更新に失敗しました:", error);
     return false;
+  }
+};
+
+// すれ違い検知専用の関数（位置情報の保存は行わない）
+export const performEncounterDetection = async (
+  userId: string
+): Promise<EncounterWithUserInfo[]> => {
+  try {
+    console.log("すれ違い検知専用処理開始 - userId:", userId);
+
+    // 現在地を取得
+    const location = await Location.getCurrentPositionAsync({
+      accuracy: Location.Accuracy.High,
+    });
+
+    // すれ違い検知のみ実行
+    const encounters = await detectAndRecordEncounters(userId, {
+      latitude: location.coords.latitude,
+      longitude: location.coords.longitude,
+    });
+
+    console.log(`すれ違い検知専用処理完了: ${encounters.length}件検出`);
+    return encounters;
+  } catch (error) {
+    console.error("すれ違い検知専用処理エラー:", error);
+    return [];
   }
 };

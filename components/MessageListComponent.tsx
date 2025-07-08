@@ -1,5 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef } from "react";
 import {
   Animated,
   Image,
@@ -54,7 +54,7 @@ export const MessageListComponent: React.FC<MessageListComponentProps> = ({
   onSlideToNormal, // 新しいプロパティを追加
 }) => {
   const scrollViewRef = useRef<ScrollView>(null);
-  const [keyboardHeight, setKeyboardHeight] = useState(0);
+  // const [keyboardHeight, setKeyboardHeight] = useState(0); // 削除: 使用されていない
   const panY = useRef(new Animated.Value(0)).current; // ボトムシート全体のドラッグ処理
   const onGestureEvent = Animated.event(
     [{ nativeEvent: { translationY: panY } }],
@@ -104,53 +104,31 @@ export const MessageListComponent: React.FC<MessageListComponentProps> = ({
   }; // リプライモードに入ったときにスクロール位置を調整
   useEffect(() => {
     if (replyMode && scrollViewRef.current) {
-      // リプライフォームが表示されたときに適切な位置までスクロール
+      // リプライフォームが表示されたときに下部にスクロール
       setTimeout(() => {
-        // scrollToEndではなく、適度な位置にスクロール
-        scrollViewRef.current?.scrollTo({
-          y: 200, // 固定の適度な位置
-          animated: true,
-        });
-      }, 100);
-    } else if (!replyMode && scrollViewRef.current) {
-      // リプライモードが終了したときは通常のスクロール位置に戻す
-      setTimeout(() => {
-        scrollViewRef.current?.scrollTo({ y: 0, animated: true });
+        scrollViewRef.current?.scrollToEnd({ animated: true });
       }, 100);
     }
-  }, [replyMode]); // キーボード表示/非表示のイベントリスナー
+  }, [replyMode]);
+
+  // キーボード表示/非表示のイベントリスナー
   useEffect(() => {
     const keyboardDidShowListener = Keyboard.addListener(
       "keyboardDidShow",
-      (e) => {
-        setKeyboardHeight(e.endCoordinates.height);
-        // キーボードが表示されたときに適度な位置にスクロール
-        setTimeout(() => {
-          if (replyMode) {
-            scrollViewRef.current?.scrollTo({
-              y: 150, // 適度な位置
-              animated: true,
-            });
-          }
-        }, 100);
+      () => {
+        // キーボードが表示されたときに下部にスクロール
+        if (replyMode && scrollViewRef.current) {
+          setTimeout(() => {
+            scrollViewRef.current?.scrollToEnd({ animated: true });
+          }, 100);
+        }
       }
     );
 
     const keyboardDidHideListener = Keyboard.addListener(
       "keyboardDidHide",
       () => {
-        setKeyboardHeight(0);
-        // キーボードが隠れたときは適切な位置にスクロール
-        setTimeout(() => {
-          if (replyMode) {
-            scrollViewRef.current?.scrollTo({
-              y: 100, // リプライモード時の適度な位置
-              animated: true,
-            });
-          } else {
-            scrollViewRef.current?.scrollTo({ y: 0, animated: true });
-          }
-        }, 50);
+        // キーボードが隠れたときの処理（必要に応じて）
       }
     );
 
@@ -177,7 +155,7 @@ export const MessageListComponent: React.FC<MessageListComponentProps> = ({
         <KeyboardAvoidingView
           style={{ flex: 1 }}
           behavior={Platform.OS === "ios" ? "padding" : "height"}
-          keyboardVerticalOffset={Platform.OS === "ios" ? 80 : 0}
+          keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 0}
           enabled={true}
         >
           {" "}
@@ -201,25 +179,20 @@ export const MessageListComponent: React.FC<MessageListComponentProps> = ({
               <Ionicons name="close" size={24} color="#666" />
             </TouchableOpacity>
           </View>{" "}
-          {/* コメントリスト */}{" "}
+          {/* コメントリスト */}
           <ScrollView
             ref={scrollViewRef}
             style={styles.messageList}
             contentContainerStyle={{
-              paddingBottom: replyMode
-                ? Math.max(300, keyboardHeight + 150)
-                : 50,
               flexGrow: 1,
-              minHeight: replyMode ? "100%" : "auto",
+              paddingBottom: replyMode ? 350 : 100,
             }}
             keyboardShouldPersistTaps="handled"
-            showsVerticalScrollIndicator={false}
-            automaticallyAdjustContentInsets={false}
-            automaticallyAdjustKeyboardInsets={true}
-            maintainVisibleContentPosition={{
-              minIndexForVisible: 0,
-              autoscrollToTopThreshold: 10,
-            }}
+            showsVerticalScrollIndicator={true}
+            scrollEnabled={true}
+            bounces={true}
+            overScrollMode="auto"
+            automaticallyAdjustKeyboardInsets={false}
           >
             <View style={styles.messageItemContainer}>
               <View style={styles.messageItem}>
