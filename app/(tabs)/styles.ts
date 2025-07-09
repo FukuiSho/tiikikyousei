@@ -69,6 +69,17 @@ export const styles = StyleSheet.create({
   closeButton: {
     padding: 4,
   },
+  logoutButton: {
+    backgroundColor: "#ff4d4f", // ログアウトボタンの背景色
+    paddingVertical: 8,
+    paddingHorizontal: 15,
+    borderRadius: 5,
+  },
+  logoutButtonText: {
+    color: "#fff", // ログアウトボタンのテキスト色
+    fontWeight: "bold",
+    fontSize: 14,
+  },
   modalBody: {
     paddingHorizontal: 20,
     paddingVertical: 10,

@@ -1,5 +1,5 @@
 // タイプ定義ファイル
-import * as Location from 'expo-location';
+import * as Location from "expo-location";
 
 export interface Post {
   id: string;
@@ -10,6 +10,7 @@ export interface Post {
   };
   timestamp: Date;
   author: string;
+  authorUid?: string;
   image?: string;
   imagePosition?: {
     x: number;
@@ -28,6 +29,7 @@ export interface Reply {
   id: string;
   content: string;
   author: string;
+  authorUid?: string;
   timestamp: Date;
   reactions?: {
     [userId: string]: string;

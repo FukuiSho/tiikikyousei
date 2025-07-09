@@ -1,7 +1,14 @@
 // Import the functions you need from the SDKs you need
-import { ReactNativeAsyncStorage } from "@react-native-async-storage/async-storage";
 import { initializeApp } from "firebase/app";
-import { getReactNativePersistence, initializeAuth } from "firebase/auth"; // Firebase Authenticationを使えるようにするため
+import {
+  /*getAuth,*/
+  /*GoogleAuthProvider,*/
+  getReactNativePersistence,
+  initializeAuth,
+} from "firebase/auth"; // Firebase Authenticationを使えるようにするため
+
+import ReactNativeAsyncStorage from "@react-native-async-storage/async-storage";
+
 import { getFirestore } from "firebase/firestore"; // Cloud Firestoreを使えるようにするため
 // TODO: Add SDKs for Firebase products that you want to use
 // https://firebase.google.com/docs/web/setup#available-libraries
@@ -18,8 +25,12 @@ const firebaseConfig = {
 
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
+// 一旦放置
+//const auth = getAuth(app);
 const auth = initializeAuth(app, {
   persistence: getReactNativePersistence(ReactNativeAsyncStorage),
 });
-export { app, auth, db };
+const db = getFirestore(app);
+//const provider = new GoogleAuthProvider();
+
+export { auth, db };
