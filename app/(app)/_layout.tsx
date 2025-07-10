@@ -1,10 +1,10 @@
-// app/(app)/_layout.tsx
+// C:\Users\hibik\.vscode\tiikikyousei\app\(app)\_layout.tsx
 import { Stack } from 'expo-router';
 
 export default function AppLayout() {
   return (
     <Stack>
-      {/* アプリのメイン画面はタブナビゲーション (tabs) です */}
+      {/* アプリのメイン画面はタブナビゲーションです */}
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
       {/* このグループ内での存在しないルートのフォールバック */}
       <Stack.Screen name="+not-found" />

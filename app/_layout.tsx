@@ -1,7 +1,7 @@
-// app/_layout.tsx
+// C:\Users\hibik\.vscode\tiikikyousei\app\_layout.tsx
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { useFonts } from 'expo-font';
-import { Stack } from 'expo-router'; // Stackをインポート
+import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import 'react-native-reanimated';
 
@@ -20,8 +20,7 @@ export default function RootLayout() {
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
       <Stack>
-        {/* ★ここが重要です！認証グループを一番上に記述してください。 */}
-        {/* これにより、アプリ起動時にまず認証関連の画面が探索されます。 */}
+        {/* アプリ起動時に最初に表示される認証グループ */}
         <Stack.Screen name="(auth)" options={{ headerShown: false }} />
 
         {/* 認証が完了した後に表示されるメインアプリのグループ */}

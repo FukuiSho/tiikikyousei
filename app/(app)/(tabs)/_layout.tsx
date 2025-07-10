@@ -1,7 +1,7 @@
-// app/(app)/(tabs)/_layout.tsx
-import { TabBarIcon } from '@/components/navigation/TabBarIcon'; // おそらく既存
-import { Colors } from '@/constants/Colors'; // おそらく既存
-import { useColorScheme } from '@/hooks/useColorScheme'; // おそらく既存
+// C:\Users\hibik\.vscode\tiikikyousei\app\(app)/(tabs)/_layout.tsx
+import { TabBarIcon } from '@/components/navigation/TabBarIcon';
+import { Colors } from '@/constants/Colors';
+import { useColorScheme } from '@/hooks/useColorScheme';
 import { Tabs } from 'expo-router';
 
 export default function TabLayout() {
@@ -11,10 +11,10 @@ export default function TabLayout() {
     <Tabs
       screenOptions={{
         tabBarActiveTintColor: Colors[colorScheme ?? 'light'].tint,
-        headerShown: false, // 各タブ画面のヘッダーを非表示にする
+        headerShown: false,
       }}>
       <Tabs.Screen
-        name="index" // app/(app)/(tabs)/index.tsx に対応
+        name="index"
         options={{
           title: 'Home',
           tabBarIcon: ({ color, focused }) => (
@@ -23,11 +23,20 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="explore" // app/(app)/(tabs)/explore.tsx に対応
+        name="explore"
         options={{
           title: 'Explore',
           tabBarIcon: ({ color, focused }) => (
             <TabBarIcon name={focused ? 'code-slash' : 'code-slash-outline'} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="profile"
+        options={{
+          title: 'プロフィール',
+          tabBarIcon: ({ color, focused }) => (
+            <TabBarIcon name={focused ? 'person' : 'person-outline'} color={color} />
           ),
         }}
       />
