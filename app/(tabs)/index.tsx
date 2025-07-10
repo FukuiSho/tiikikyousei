@@ -2,36 +2,21 @@ import { Ionicons } from "@expo/vector-icons";
 import * as Location from "expo-location";
 import { StatusBar } from "expo-status-bar";
 import * as WebBrowser from "expo-web-browser";
+import { User } from "firebase/auth";
+import { addDoc, collection } from "firebase/firestore";
+import React, { createContext, useEffect, useRef, useState } from "react";
 import {
-  createUserWithEmailAndPassword,
-  onAuthStateChanged,
-  signInWithEmailAndPassword,
-  signOut,
-  updateProfile,
-  User,
-} from "firebase/auth";
-import { addDoc, collection, doc, setDoc } from "firebase/firestore";
-import React, {
-  createContext,
-  useContext,
-  useEffect,
-  useRef,
-  useState,
-} from "react";
-import {
-  ActivityIndicator,
   Alert,
   Animated,
   Dimensions,
   Platform,
   SafeAreaView,
-  StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from "react-native";
-import { auth, db } from "../../src/firebase";
-import SignupScreen from "./signup";
+import { db } from "../../src/firebase";
+import { AuthContextProvider, useAuthContext } from "./signup";
 
 import { MapComponentWrapper } from "../../components/MapComponentWrapper";
 import { MessageListComponent } from "../../components/MessageListComponent";
@@ -49,7 +34,7 @@ interface AuthContextType {
   loading: boolean; // ローディング状態
   signup: (email: string, password: string, nickname: string) => Promise<void>;
 }
-const AuthContext = createContext<AuthContextType | null>(null);
+export const AuthContext = createContext<AuthContextType | null>(null);
 // import { getOffsetCoordinates } from '../../components/utils/locationUtils'; // 現在未使用
 import {
   selectImageFromCamera,
@@ -59,237 +44,6 @@ import {
 import { showReactionPicker } from "../../components/utils/reactionUtils";
 
 const { height } = Dimensions.get("window");
-
-// アカウント関連
-const AuthContextProvider = ({ children }: { children: React.ReactNode }) => {
-  const [loginUser, setLoginUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true); // ロード状態
-
-  // Googleアカウントログイン関連の遺物
-  // Google認証設定
-  /*const [request, response, promptAsync] = Google.useAuthRequest({
-    // IMPORTANT: Use your Web client ID from Google Cloud Console
-    // This is NOT the Android/iOS client ID. It's the one for "Web application".
-    // Example: 'YOUR_WEB_CLIENT_ID.apps.googleusercontent.com'
-    androidClientId:
-      "303304465881-9ninlcjd3oaf7m834e38rseprm1kh6jl.apps.googleusercontent.com",
-    webClientId:
-      "303304465881-ali1oac1jd5rf12mdpvak6b61886i6pf.apps.googleusercontent.com",
-    scopes: ["profile", "email"],
-    // If you are testing in a standalone build or want more control,
-    // you might also need to set iosClientId, androidClientId.
-    // But for Firebase Auth, webClientId is often enough if it's correctly configured.
-  });
-  */
-
-  // FirebaseAuthentication状態変化の確認
-  useEffect(() => {
-    // onAuthStateChangedでユーザーのログイン状態が変化時、呼び出し
-    // アプリ起動時にも現在のログイン状態を通知
-    const subscriber = onAuthStateChanged(auth, async (firebaseUser) => {
-      setLoginUser(firebaseUser as User | null);
-      setLoading(false); // 認証確認終了時ロード終了
-    });
-    // クリーンアップ
-    return subscriber;
-  }, []);
-
-  // メールアドレス/パスワードでの場合
-  // サインアップ
-  const signup = async (email: string, password: string, nickname: string) => {
-    setLoading(true); // サインアップ処理開始時
-    try {
-      const userCredential = await createUserWithEmailAndPassword(
-        auth,
-        email,
-        password
-      );
-      // ユーザ表示名更新
-      if (userCredential.user) {
-        await updateProfile(userCredential.user, {
-          displayName: nickname,
-        });
-
-        // Firestoreにユーザ情報を保存
-        await setDoc(
-          doc(db, "users", userCredential.user.uid),
-          {
-            displayName: nickname,
-            photoURL: userCredential.user.photoURL || null,
-            email: userCredential.user.email,
-            createdAt: new Date(),
-          },
-          { merge: true } // 既存フィールドは上書きせず更新・追加
-        );
-        Alert.alert(
-          "True SignUp 登録完了",
-          "アカウントが正常に作成されました。"
-        );
-      }
-    } catch (error: any) {
-      let errorMessage = "SignUpError アカウント登録に失敗しました。";
-      switch (error.code) {
-        case "auth/email-already-in-use":
-          errorMessage = "このメールアドレスは既に使用されています。";
-          break;
-        case "auth/invalid-email":
-          errorMessage = "メールアドレスの形式が正しくありません。";
-          break;
-        case "auth/operation-not-allowed":
-          errorMessage =
-            "現在メールアドレス/パスワードでの登録は許可されていません。管理者に確認してください。";
-          break;
-        case "auth/weak-password":
-          errorMessage =
-            "パスワードが弱すぎます。6文字以上のより強力なパスワードに設定してください。";
-          break;
-        default:
-          console.error("Firebase SignUp error:", error);
-          break;
-      }
-      Alert.alert("登録エラー", errorMessage);
-      throw error; // errorを呼び出し元に伝える
-    } finally {
-      setLoading(false); // 新規登録処理終了時
-    }
-  };
-
-  // ログイン
-  const login = async (email: string, password: string) => {
-    setLoading(true); // ログイン処理開始時
-    try {
-      await signInWithEmailAndPassword(auth, email, password);
-      Alert.alert("True Login ログイン成功", "ようこそ"); // 成功時、loginUserが更新
-    } catch (error: any) {
-      let errorMessage = "LoginError ログインに失敗しました。";
-      switch (error.code) {
-        case "auth/invalid-email":
-          errorMessage = "無効なメールアドレスです。";
-          break;
-        case "auth/user-disabled":
-          errorMessage = "このアカウントは無効化されています。";
-          break;
-        case "auth/user-not-found":
-          errorMessage = "ユーザが見つかりません。";
-          break;
-        case "auth/wrong-password":
-          errorMessage = "パスワードが違います。";
-          break;
-        default:
-          console.error("Firebase Login error:", error);
-          break;
-      }
-      Alert.alert("ログインエラー", errorMessage);
-      throw error; // errorを呼び出し元に伝える
-    } finally {
-      setLoading(false); // ログイン処理終了時
-    }
-  };
-
-  // ログアウト
-  const logout = async () => {
-    setLoading(true); // ログアウト処理開始時
-    try {
-      await signOut(auth);
-      Alert.alert("Logout ログアウト", "ログアウトしました。");
-    } catch (error: any) {
-      console.error("Logout error:", error);
-      Alert.alert(
-        "Logout error ログアウトエラー",
-        `ログアウト中に問題が発生しました: ${error.message}`
-      );
-    }
-  };
-
-  // Googleログインの場合（遺物）
-  /*
-  useEffect(() => {
-    if (response?.type === "success") {
-      const { id_token } = response.authentication;
-      if (id_token) {
-        const credentual = GoogleAuthProvider.credential(id_token);
-        signInWithCredential(auth, credentual)
-          .then(async (result) => {
-            // Firestoreにユーザ情報を保存
-            if (result.user.uid) {
-              await setDoc(
-                doc(db, "users", result.user.uid),
-                {
-                  displayName: result.user.displayName,
-                  photoURL: result.user.photoURL,
-                  email: result.user.email,
-                },
-                { merge: true }
-              );
-            }
-            Alert.alert("True sign-in");
-          })
-          .catch((error) => {
-            console.error("Firebase sign-in error:", error);
-          });
-      }
-    } else if (response?.type === "error") {
-      console.error("Google Auth error:", response.error);
-    }
-  }, [response]); // responseが変わるたびに実行
-
-  const login = async () => {
-    try {
-      if (!request) {
-        Alert.alert("ninsyo error");
-        return;
-      }
-      // ブラウザ開くトリガー
-      await promptAsync();
-    } catch (error: any) {
-      console.error("Login error:", error);
-      Alert.alert("Login error", `Login problem:${error.message}`);
-    }
-  };
-  const logout = async () => {
-    try {
-      await signOut(auth);
-      //setLoginUser(null);
-      Alert.alert("Logout");
-    } catch (error: any) {
-      console.error("Logout error:", error);
-      Alert.alert("Logout error", `Logout problem:${error.message}`);
-    }
-  };
-  */
-
-  const value = {
-    loginUser,
-    login,
-    logout,
-    loading,
-    signup,
-  };
-
-  return (
-    <AuthContext.Provider value={value}>
-      {loading ? (
-        <View style={authStyles.loadingContainer}>
-          <ActivityIndicator size="large" color="#6200EE" />
-          <Text style={{ marginTop: 10 }}>認証状態確認中...</Text>
-        </View>
-      ) : loginUser ? (
-        children
-      ) : (
-        <SignupScreen />
-      )}
-    </AuthContext.Provider>
-  );
-};
-export const useAuthContext = () => {
-  const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error(
-      "useAuthContext must be used within an AuthContextProvider"
-    );
-  }
-  return context;
-};
 
 function HomeScreen() {
   // ========== 状態変数 ==========
@@ -827,15 +581,6 @@ function HomeScreen() {
     </SafeAreaView>
   );
 }
-
-const authStyles = StyleSheet.create({
-  loadingContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "#f0f0f0",
-  },
-});
 
 export default function AppWrapper() {
   return (
