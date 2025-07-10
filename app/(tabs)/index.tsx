@@ -1,7 +1,9 @@
 import { Ionicons } from "@expo/vector-icons";
+import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
 import {
+  Alert,
   Animated,
   Dimensions,
   Image,
@@ -19,12 +21,15 @@ import {
 import MapView, { Marker } from "react-native-maps";
 
 // 型とユーティリティのインポート
+import { PostModalComponent } from "../../components/PostModalComponent";
 import { getPostsForCoordinates } from "../../components/utils/locationUtils";
 import { getReactionImage } from "../../components/utils/reactionUtils";
 import { styles } from "../../components/utils/styles";
 import { Post } from "../../components/utils/types";
 import { useLocationTracking } from "../../hooks/useLocationTracking";
 import { usePostManagement } from "../../hooks/usePostManagement";
+import { createPost } from "../../services/postService";
+import { uploadImageToStorage, validateImageSize } from "../../services/imageService";
 import { getPersistentUserId } from "../../services/userService";
 
 const { height } = Dimensions.get("window");
@@ -39,6 +44,9 @@ export default function HomeScreen() {
   } | null>(null);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   const [currentUserId, setCurrentUserId] = useState<string>("");
+  
+  // 画像投稿用の状態管理
+  const [selectedImage, setSelectedImage] = useState<string | null>(null);
 
   // 位置情報追跡フック
   const {
@@ -71,7 +79,6 @@ export default function HomeScreen() {
     setNewPost,
     setNewReply,
     setReplyMode,
-    handleCreatePost,
     handleReplySubmit,
     handleReaction,
     showReactionPicker,
@@ -153,7 +160,121 @@ export default function HomeScreen() {
     }
   }, [location, posts.length, setPosts]);
 
-  // キーボ�Eドイベントリスナ�E
+  // 画像選択機能
+  const handleImagePicker = async () => {
+    try {
+      // パーミッションを要求
+      const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permissionResult.granted) {
+        alert("フォトライブラリへのアクセスを許可してください");
+        return;
+      }
+
+      // 画像を選択
+      const pickerResult = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [4, 3],
+        quality: 0.8,
+      });
+
+      if (!pickerResult.canceled && pickerResult.assets[0]) {
+        setSelectedImage(pickerResult.assets[0].uri);
+      }
+    } catch (error) {
+      console.error("画像選択エラー:", error);
+      alert("画像の選択に失敗しました");
+    }
+  };
+
+  // 画像削除機能
+  const handleRemoveImage = () => {
+    setSelectedImage(null);
+  };
+
+  // 投稿作成時の画像アップロード処理
+  const handleCreatePostWithImage = async () => {
+    if (!newPost.content.trim() && !selectedImage) {
+      Alert.alert("エラー", "投稿内容または画像を入力してください");
+      return;
+    }
+
+    if (!location) {
+      Alert.alert("エラー", "位置情報が取得できません");
+      return;
+    }
+
+    try {
+      console.log("画像付き投稿作成開始...");
+      
+      let photoURL = undefined;
+      
+      // 画像が選択されている場合はFirebase Storageにアップロード
+      if (selectedImage) {
+        // 画像サイズをチェック
+        const isValidSize = await validateImageSize(selectedImage);
+        if (!isValidSize) {
+          Alert.alert("エラー", "画像サイズが10MBを超えています。より小さい画像を選択してください。");
+          return;
+        }
+        
+        console.log("Firebase Storageに画像をアップロード中...");
+        photoURL = await uploadImageToStorage(selectedImage, currentUserId);
+        
+        if (!photoURL) {
+          Alert.alert("エラー", "画像のアップロードに失敗しました");
+          return;
+        }
+        
+        console.log("画像アップロード成功:", photoURL);
+      }
+      
+      // createPostを直接呼び出し、画像URLを含める
+      const postData = {
+        content: newPost.content,
+        location: {
+          latitude: location.coords.latitude,
+          longitude: location.coords.longitude,
+        },
+        userId: currentUserId,
+        photoURL: photoURL, // Firebase Storageからの画像URL
+      };
+
+      const result = await createPost(postData);
+      if (result) {
+        console.log("画像付き投稿作成成功:", result);
+        
+        // ローカルの投稿リストに追加
+        const newPostObj: Post = {
+          id: result.id,
+          content: newPost.content,
+          author: `User-${currentUserId.slice(-6)}`,
+          location: {
+            latitude: location.coords.latitude,
+            longitude: location.coords.longitude,
+          },
+          timestamp: new Date(),
+          image: photoURL, // Firebase Storageからの画像URL
+          replies: [],
+          reactions: {},
+          reactionCounts: {},
+        };
+
+        setPosts((prev) => [newPostObj, ...prev]);
+        setNewPost({ content: "" });
+        setSelectedImage(null);
+        setModalVisible(false);
+        Alert.alert("成功", "投稿が作成されました！");
+      } else {
+        Alert.alert("エラー", "投稿の作成に失敗しました");
+      }
+    } catch (error) {
+      console.error("画像付き投稿の作成エラー:", error);
+      Alert.alert("エラー", "投稿の作成に失敗しました");
+    }
+  };
+
+  // キーボード高さの管理
   useEffect(() => {
     const keyboardDidShowListener = Keyboard.addListener(
       "keyboardDidShow",
@@ -379,6 +500,14 @@ export default function HomeScreen() {
                       <View style={styles.messageContent}>
                         <Text style={styles.userName}>{post.author}</Text>
                         <Text style={styles.messageText}>{post.content}</Text>
+                        {/* 画像表示 */}
+                        {post.image && (
+                          <Image
+                            source={{ uri: post.image }}
+                            style={styles.messageImage}
+                            resizeMode="cover"
+                          />
+                        )}
                         <Text style={styles.messageTime}>
                           {post.timestamp.toLocaleString("ja-JP")}
                         </Text>
@@ -633,74 +762,24 @@ export default function HomeScreen() {
       >
         <Ionicons name="add" size={28} color="white" />
       </TouchableOpacity>
-      <Modal
-        animationType="slide"
-        transparent={true}
+      <PostModalComponent
         visible={modalVisible}
-        onRequestClose={() => {
+        newPost={{
+          content: newPost.content,
+          author: "", // 投稿者名は自動設定されるため空文字列
+          image: selectedImage || ""
+        }}
+        selectedImage={selectedImage}
+        onClose={() => {
           handleCancelPost();
           setModalVisible(false);
+          setSelectedImage(null);
         }}
-      >
-        <KeyboardAvoidingView
-          style={styles.modalContainer}
-          behavior={Platform.OS === "ios" ? "padding" : "height"}
-          keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 0}
-        >
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>新しい投稿</Text>
-              <TouchableOpacity
-                style={styles.closeButton}
-                onPress={() => {
-                  handleCancelPost();
-                  setModalVisible(false);
-                }}
-              >
-                <Ionicons name="close" size={24} color="#666" />
-              </TouchableOpacity>{" "}
-            </View>
-            <ScrollView
-              style={styles.modalBody}
-              keyboardShouldPersistTaps="handled"
-              showsVerticalScrollIndicator={false}
-            >
-              <View style={styles.inputGroup}>
-                <Text style={styles.label}>内容</Text>
-                <TextInput
-                  style={[styles.input, styles.textArea]}
-                  placeholder="投稿の内容を入力してください"
-                  value={newPost.content}
-                  onChangeText={(text) =>
-                    setNewPost({ ...newPost, content: text })
-                  }
-                  multiline={true}
-                  numberOfLines={5}
-                  maxLength={300}
-                  textAlignVertical="top"
-                />
-              </View>
-            </ScrollView>
-            <View style={styles.modalFooter}>
-              <TouchableOpacity
-                style={styles.cancelButton}
-                onPress={() => {
-                  handleCancelPost();
-                  setModalVisible(false);
-                }}
-              >
-                <Text style={styles.cancelButtonText}>キャンセル</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.submitButton}
-                onPress={() => handleCreatePost(() => setModalVisible(false))}
-              >
-                <Text style={styles.submitButtonText}>投稿する</Text>{" "}
-              </TouchableOpacity>
-            </View>
-          </View>
-        </KeyboardAvoidingView>
-      </Modal>
+        onNewPostChange={(post) => setNewPost({ content: post.content })} // authorは使用しない
+        onCreatePost={handleCreatePostWithImage}
+        onImagePicker={handleImagePicker}
+        onRemoveImage={handleRemoveImage}
+      />
 
       {/* リアクション選択モーダル */}
       <Modal

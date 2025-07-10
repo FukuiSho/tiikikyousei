@@ -84,20 +84,6 @@ export const PostModalComponent: React.FC<PostModalComponentProps> = ({
               />
             </View>
 
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>投稿者名</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="あなたの名前を入力"
-                value={newPost.author}
-                onChangeText={(text) =>
-                  onNewPostChange({ ...newPost, author: text })
-                }
-                maxLength={20}
-                returnKeyType="done"
-              />
-            </View>
-
             {/* ========== 画像選択セクション ========== */}
             <View style={styles.inputGroup}>
               <Text style={styles.label}>画像</Text>

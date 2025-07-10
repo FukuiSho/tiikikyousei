@@ -40,7 +40,7 @@ export interface Reply {
 
 export interface NewPost {
   content: string;
-  author: string;
+  author?: string; // 任意フィールドに変更
   image: string;
 }
 

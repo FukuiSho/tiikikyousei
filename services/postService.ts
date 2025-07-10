@@ -227,6 +227,7 @@ export const createPost = async (postData: {
   content: string;
   location: { latitude: number; longitude: number };
   userId: string;
+  photoURL?: string; // 画像URL追加
 }): Promise<{ id: string } | null> => {
   try {
     console.log("投稿を作成:", postData);
@@ -235,6 +236,7 @@ export const createPost = async (postData: {
       text: postData.content,
       latitude: postData.location.latitude,
       longitude: postData.location.longitude,
+      photoURL: postData.photoURL, // 画像URL追加
     };
 
     const postId = await savePostToFirestore(newPost);
