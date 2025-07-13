@@ -2,6 +2,7 @@ import * as Location from "expo-location";
 import { useCallback, useRef, useState } from "react";
 import { Alert } from "react-native";
 import { Post } from "../components/utils/types";
+import { validateAndConvertImageUrl } from "../services/imageService";
 import { saveLocationToFirestore } from "../services/locationService";
 import { getNearbyPosts } from "../services/postService";
 
@@ -49,46 +50,83 @@ export const useLocationTracking = ({
     []
   );
 
-  // Firestoreデータをローカル形式に変換する関数
+  // Firestoreデータをローカル形式に変換する関数（非同期）
   const convertFirestorePostsToLocal = useCallback(
-    (firestorePosts: any[]): Post[] => {
-      return firestorePosts.map((firestorePost) => {
-        // Firestoreのリアクション情報を変換
-        const reactions: { [userID: string]: string } = {};
-        const reactionCounts: { [emoji: string]: number } = {};
+    async (firestorePosts: any[]): Promise<Post[]> => {
+      return await Promise.all(
+        firestorePosts.map(async (firestorePost) => {
+          // ★デバッグ用: Firestoreデータの詳細確認
+          console.log("=== convertFirestorePostsToLocal Debug ===");
+          console.log("Firestore Post ID:", firestorePost.id);
+          console.log("Firestore text:", firestorePost.text);
+          console.log("Firestore photoURL:", firestorePost.photoURL);
+          console.log("photoURL Type:", typeof firestorePost.photoURL);
+          console.log("photoURL存在確認:", !!firestorePost.photoURL);
+          console.log("photoURL Length:", firestorePost.photoURL?.length);
+          console.log("userID:", firestorePost.userID);
+          console.log("全データ:", JSON.stringify(firestorePost, null, 2));
+          console.log("==========================================");
 
-        if (
-          firestorePost.reactions &&
-          typeof firestorePost.reactions === "object"
-        ) {
-          Object.entries(firestorePost.reactions).forEach(
-            ([emoji, data]: [string, any]) => {
-              if (data && data.userIds && Array.isArray(data.userIds)) {
-                reactionCounts[emoji] = data.count || data.userIds.length;
-                // 各ユーザーの反応を記録
-                data.userIds.forEach((userId: string) => {
-                  reactions[userId] = emoji;
-                });
+          // Firestoreのリアクション情報を変換
+          const reactions: { [userID: string]: string } = {};
+          const reactionCounts: { [emoji: string]: number } = {};
+
+          if (
+            firestorePost.reactions &&
+            typeof firestorePost.reactions === "object"
+          ) {
+            Object.entries(firestorePost.reactions).forEach(
+              ([emoji, data]: [string, any]) => {
+                if (data && data.userIds && Array.isArray(data.userIds)) {
+                  reactionCounts[emoji] = data.count || data.userIds.length;
+                  // 各ユーザーの反応を記録
+                  data.userIds.forEach((userId: string) => {
+                    reactions[userId] = emoji;
+                  });
+                }
               }
-            }
-          );
-        }
+            );
+          }
 
-        return {
-          id: firestorePost.id,
-          content: firestorePost.text,
-          author: `User-${firestorePost.userID.slice(-6)}`,
-          location: {
-            latitude: firestorePost.coordinates.latitude,
-            longitude: firestorePost.coordinates.longitude,
-          },
-          timestamp: firestorePost.timestamp,
-          parentPostID: firestorePost.parentPostID,
-          reactions: reactions,
-          reactionCounts: reactionCounts,
-          replies: [],
-        };
-      });
+          // 画像URLを処理（photoURL -> image）
+          let imageUrl: string | undefined = undefined;
+          if (firestorePost.photoURL) {
+            // 画像URLの検証と変換を実行
+            const convertedUrl = await validateAndConvertImageUrl(
+              firestorePost.photoURL
+            );
+            imageUrl = convertedUrl || undefined; // null -> undefined変換
+            console.log(
+              "convertFirestorePostsToLocal: 画像URL変換完了:",
+              imageUrl
+            );
+          } else {
+            console.log("convertFirestorePostsToLocal: 画像URLがありません");
+          }
+
+          const convertedPost = {
+            id: firestorePost.id,
+            content: firestorePost.text,
+            author: `User-${firestorePost.userID.slice(-6)}`,
+            location: {
+              latitude: firestorePost.coordinates.latitude,
+              longitude: firestorePost.coordinates.longitude,
+            },
+            timestamp: firestorePost.timestamp,
+            parentPostID: firestorePost.parentPostID,
+            image: imageUrl, // ★重要: photoURLをimageフィールドに変換
+            reactions: reactions,
+            reactionCounts: reactionCounts,
+            replies: [],
+          };
+
+          console.log(
+            "convertFirestorePostsToLocal: 変換後データ:",
+            JSON.stringify(convertedPost, null, 2)
+          );
+          return convertedPost;
+        })
+      );
     },
     []
   );
@@ -97,6 +135,9 @@ export const useLocationTracking = ({
   const loadAndUpdateNearbyPosts = useCallback(
     async (currentLocation: Location.LocationObject) => {
       try {
+        console.log(
+          "=== useLocationTracking: loadAndUpdateNearbyPosts 開始 ==="
+        );
         console.log("周辺投稿を取得中...");
         const nearbyPosts = await getNearbyPosts(
           currentLocation.coords.latitude,
@@ -105,12 +146,21 @@ export const useLocationTracking = ({
         );
 
         if (nearbyPosts.length > 0) {
-          console.log(`周辺投稿${nearbyPosts.length}件取得しました`);
-          const convertedPosts = convertFirestorePostsToLocal(nearbyPosts);
+          console.log(
+            `useLocationTracking: 周辺投稿${nearbyPosts.length}件取得しました`
+          );
+          const convertedPosts =
+            await convertFirestorePostsToLocal(nearbyPosts);
+          console.log(
+            `useLocationTracking: 変換完了 ${convertedPosts.length}件`
+          );
 
           // 既存の投稿を更新または新しい投稿を追加
           if (setPostsRef.current) {
-            setPostsRef.current((prevPosts) => {
+            console.log(
+              "useLocationTracking: setPostsRef.current で投稿リストを更新中..."
+            );
+            setPostsRef.current((prevPosts: Post[]) => {
               const updatedPosts = [...prevPosts];
               let hasNewPosts = false;
 
@@ -125,25 +175,41 @@ export const useLocationTracking = ({
                     reactions: newPost.reactions,
                     reactionCounts: newPost.reactionCounts,
                   };
+                  console.log(
+                    `useLocationTracking: 既存投稿を更新: ${newPost.id}`
+                  );
                 } else {
                   // 新しい投稿を追加
                   updatedPosts.unshift(newPost);
                   hasNewPosts = true;
+                  console.log(
+                    `useLocationTracking: 新しい投稿を追加: ${newPost.id}`
+                  );
                 }
               });
 
               if (hasNewPosts) {
-                console.log(`新しい投稿が追加されました`);
+                console.log(`useLocationTracking: 新しい投稿が追加されました`);
               }
 
+              console.log(
+                `useLocationTracking: 最終的な投稿数: ${updatedPosts.length}`
+              );
               return updatedPosts;
             });
+          } else {
+            console.log(
+              "⚠️ useLocationTracking: setPostsRef.current が null です"
+            );
           }
         } else {
-          console.log("周辺に新しい投稿はありません");
+          console.log("useLocationTracking: 周辺に新しい投稿はありません");
         }
+        console.log(
+          "=== useLocationTracking: loadAndUpdateNearbyPosts 完了 ==="
+        );
       } catch (error) {
-        console.error("周辺投稿取得エラー:", error);
+        console.error("useLocationTracking: 周辺投稿取得エラー:", error);
       }
     },
     [convertFirestorePostsToLocal]

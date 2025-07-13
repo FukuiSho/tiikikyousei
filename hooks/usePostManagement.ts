@@ -2,6 +2,7 @@ import * as Location from "expo-location";
 import { useCallback, useState } from "react";
 import { Alert } from "react-native";
 import { Post, PostFormData } from "../components/utils/types";
+import { validateAndConvertImageUrl } from "../services/imageService";
 import {
   createPost,
   createReply,
@@ -338,42 +339,101 @@ export const usePostManagement = ({
         1.0
       );
 
+      console.log(
+        "usePostManagement: 取得された生データ:",
+        nearbyPosts.length,
+        "件"
+      );
+
+      // 生データの詳細確認
+      nearbyPosts.forEach((rawPost, index) => {
+        console.log(`=== Raw Post ${index + 1} Debug ===`);
+        console.log("ID:", rawPost.id);
+        console.log("text:", rawPost.text);
+        console.log("photoURL:", rawPost.photoURL);
+        console.log("photoURL type:", typeof rawPost.photoURL);
+        console.log("photoURL is null:", rawPost.photoURL === null);
+        console.log("photoURL is undefined:", rawPost.photoURL === undefined);
+        console.log("photoURL is empty string:", rawPost.photoURL === "");
+        console.log("photoURL length:", rawPost.photoURL?.length);
+        console.log("userID:", rawPost.userID);
+        console.log("coordinates:", rawPost.coordinates);
+        console.log("timestamp:", rawPost.timestamp);
+        console.log("parentPostID:", rawPost.parentPostID);
+        console.log("全データ:", JSON.stringify(rawPost, null, 2));
+        console.log("==========================");
+      });
+
       if (nearbyPosts.length > 0) {
-        const convertedPosts = nearbyPosts.map((firestorePost) => {
-          const reactions: { [userID: string]: string } = {};
-          const reactionCounts: { [emoji: string]: number } = {};
+        console.log("usePostManagement: 周辺投稿の変換開始...");
 
-          if (
-            firestorePost.reactions &&
-            typeof firestorePost.reactions === "object"
-          ) {
-            Object.entries(firestorePost.reactions).forEach(
-              ([emoji, data]: [string, any]) => {
-                if (data && data.userIds && Array.isArray(data.userIds)) {
-                  reactionCounts[emoji] = data.count || data.userIds.length;
-                  data.userIds.forEach((userId: string) => {
-                    reactions[userId] = emoji;
-                  });
-                }
-              }
+        const convertedPosts = await Promise.all(
+          nearbyPosts.map(async (firestorePost) => {
+            // ★デバッグ用: 画像URL変換の詳細ログ
+            console.log("=== Post Conversion Debug ===");
+            console.log("Firestore Post ID:", firestorePost.id);
+            console.log("Firestore text:", firestorePost.text);
+            console.log("Firestore photoURL:", firestorePost.photoURL);
+            console.log("photoURL Type:", typeof firestorePost.photoURL);
+            console.log("photoURL存在確認:", !!firestorePost.photoURL);
+            console.log("photoURL Length:", firestorePost.photoURL?.length);
+
+            // 画像URLの検証と変換（非同期処理）
+            const validImageUrl = await validateAndConvertImageUrl(
+              firestorePost.photoURL
             );
-          }
+            console.log("変換後の画像URL:", validImageUrl);
+            console.log("変換後URL Type:", typeof validImageUrl);
 
-          return {
-            id: firestorePost.id,
-            content: firestorePost.text,
-            author: `User-${firestorePost.userID.slice(-6)}`,
-            location: {
-              latitude: firestorePost.coordinates.latitude,
-              longitude: firestorePost.coordinates.longitude,
-            },
-            timestamp: firestorePost.timestamp,
-            parentPostID: firestorePost.parentPostID,
-            reactions: reactions,
-            reactionCounts: reactionCounts,
-            replies: [],
-          };
-        });
+            const reactions: { [userID: string]: string } = {};
+            const reactionCounts: { [emoji: string]: number } = {};
+
+            if (
+              firestorePost.reactions &&
+              typeof firestorePost.reactions === "object"
+            ) {
+              Object.entries(firestorePost.reactions).forEach(
+                ([emoji, data]: [string, any]) => {
+                  if (data && data.userIds && Array.isArray(data.userIds)) {
+                    reactionCounts[emoji] = data.count || data.userIds.length;
+                    data.userIds.forEach((userId: string) => {
+                      reactions[userId] = emoji;
+                    });
+                  }
+                }
+              );
+            }
+
+            const convertedPost = {
+              id: firestorePost.id,
+              content: firestorePost.text, // textフィールドをcontentにマッピング
+              author: `User-${firestorePost.userID.slice(-6)}`, // userIDからauthorを生成
+              location: {
+                latitude: firestorePost.coordinates.latitude,
+                longitude: firestorePost.coordinates.longitude,
+              },
+              timestamp: firestorePost.timestamp,
+              parentPostID: firestorePost.parentPostID,
+              image: validImageUrl || undefined, // ★重要: 検証済みの画像URL（null → undefined）
+              reactions: reactions,
+              reactionCounts: reactionCounts,
+              replies: [],
+            };
+
+            // ★デバッグ用: 変換後のデータ確認
+            console.log("Converted Post Details:");
+            console.log("- ID:", convertedPost.id);
+            console.log("- Content:", convertedPost.content);
+            console.log("- Author:", convertedPost.author);
+            console.log("- Image:", convertedPost.image);
+            console.log("- Image Type:", typeof convertedPost.image);
+            console.log("- Has Image:", !!convertedPost.image);
+            console.log("Conversion Complete for Post:", firestorePost.id);
+            console.log("=============================");
+
+            return convertedPost;
+          })
+        );
 
         // 既存の投稿を更新または新しい投稿を追加
         setPosts((prevPosts) => {

@@ -1,4 +1,59 @@
+import { Post as ServicePost } from "../../services/postService";
 import { Post } from "./types";
+
+/**
+ * postService.tsのPost型をフロントエンドのPost型に変換
+ */
+export const convertServicePostToFrontendPost = (
+  servicePost: ServicePost
+): Post => {
+  return {
+    id: servicePost.id,
+    content: servicePost.text,
+    location: {
+      latitude: servicePost.coordinates.latitude,
+      longitude: servicePost.coordinates.longitude,
+    },
+    timestamp: servicePost.timestamp,
+    author: servicePost.userID, // 仮のユーザー名として使用
+    parentPostID: servicePost.parentPostID,
+    image: servicePost.photoURL, // photoURL → image に変換
+    reactions: convertReactionsToFrontendFormat(servicePost.reactions),
+    reactionCounts: calculateReactionCounts(servicePost.reactions),
+  };
+};
+
+/**
+ * Firebase形式のreactionsをフロントエンド形式に変換
+ */
+const convertReactionsToFrontendFormat = (reactions: {
+  [emoji: string]: { count: number; userIds: string[] };
+}): { [userId: string]: string } => {
+  const frontendReactions: { [userId: string]: string } = {};
+
+  Object.entries(reactions).forEach(([emoji, data]) => {
+    data.userIds.forEach((userId) => {
+      frontendReactions[userId] = emoji;
+    });
+  });
+
+  return frontendReactions;
+};
+
+/**
+ * Firebase形式のreactionsからカウントを計算
+ */
+const calculateReactionCounts = (reactions: {
+  [emoji: string]: { count: number; userIds: string[] };
+}): { [emoji: string]: number } => {
+  const reactionCounts: { [emoji: string]: number } = {};
+
+  Object.entries(reactions).forEach(([emoji, data]) => {
+    reactionCounts[emoji] = data.count;
+  });
+
+  return reactionCounts;
+};
 
 /**
  * 同じ座標の投稿のマーカー位置をずらす関数

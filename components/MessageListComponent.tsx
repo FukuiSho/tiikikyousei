@@ -1,5 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   Animated,
   Image,
@@ -53,7 +53,69 @@ export const MessageListComponent: React.FC<MessageListComponentProps> = ({
   onSlideUp, // 新しいプロパティを追加
   onSlideToNormal, // 新しいプロパティを追加
 }) => {
+  // ★デバッグ用: selectedPostのデータを詳細に確認
+  useEffect(() => {
+    if (selectedPost) {
+      console.log("=== MessageListComponent Debug ===");
+      console.log("Selected Post ID:", selectedPost.id);
+      console.log("Selected Post Author:", selectedPost.author);
+      console.log("Selected Post Content:", selectedPost.content);
+      console.log("Selected Post Image URL:", selectedPost.image);
+      console.log("Image URL Type:", typeof selectedPost.image);
+      console.log("Image URL Length:", selectedPost.image?.length);
+      console.log(
+        "Full Selected Post Data:",
+        JSON.stringify(selectedPost, null, 2)
+      );
+      console.log("================================");
+
+      // 画像URLの形式をチェック
+      if (selectedPost.image) {
+        if (selectedPost.image.startsWith("gs://")) {
+          console.warn(
+            "⚠️ 警告: 画像URLがgs://形式です。ダウンロードURLに変換が必要です!"
+          );
+        } else if (
+          selectedPost.image.startsWith(
+            "https://firebasestorage.googleapis.com/"
+          )
+        ) {
+          console.log("✅ 画像URLは正しいHTTPS形式です");
+        } else if (
+          selectedPost.image.startsWith("http://") ||
+          selectedPost.image.startsWith("https://")
+        ) {
+          console.log("✅ 画像URLはHTTP/HTTPS形式です");
+        } else {
+          console.warn("⚠️ 警告: 画像URLの形式が不明です:", selectedPost.image);
+        }
+      } else {
+        console.log("ℹ️ 画像URLがnullまたはundefinedです");
+      }
+    }
+  }, [selectedPost]);
+
   const scrollViewRef = useRef<ScrollView>(null);
+
+  // 画像の読み込み状態を管理するstate
+  const [imageLoadState, setImageLoadState] = useState<{
+    isLoading: boolean;
+    hasError: boolean;
+    errorMessage?: string;
+  }>({
+    isLoading: false,
+    hasError: false,
+  });
+
+  // 画像URLが変更されたときに状態をリセット
+  useEffect(() => {
+    if (selectedPost?.image) {
+      setImageLoadState({
+        isLoading: true,
+        hasError: false,
+      });
+    }
+  }, [selectedPost?.image]);
   // const [keyboardHeight, setKeyboardHeight] = useState(0); // 削除: 使用されていない
   const panY = useRef(new Animated.Value(0)).current; // ボトムシート全体のドラッグ処理
   const onGestureEvent = Animated.event(
@@ -210,11 +272,78 @@ export const MessageListComponent: React.FC<MessageListComponentProps> = ({
                   )}
                   {/* 画像表示 */}
                   {selectedPost.image && (
-                    <Image
-                      source={{ uri: selectedPost.image }}
-                      style={styles.messageImage}
-                      resizeMode="cover"
-                    />
+                    <View style={styles.imageContainer}>
+                      {imageLoadState.isLoading && (
+                        <View style={styles.imageLoadingContainer}>
+                          <Text style={styles.imageLoadingText}>
+                            画像を読み込み中...
+                          </Text>
+                        </View>
+                      )}
+                      {imageLoadState.hasError && (
+                        <View style={styles.imageErrorContainer}>
+                          <Text style={styles.imageErrorText}>
+                            画像の読み込みに失敗しました
+                          </Text>
+                          <Text style={styles.imageErrorDetails}>
+                            URL: {selectedPost.image}
+                          </Text>
+                          {imageLoadState.errorMessage && (
+                            <Text style={styles.imageErrorMessage}>
+                              エラー: {imageLoadState.errorMessage}
+                            </Text>
+                          )}
+                        </View>
+                      )}
+                      <Image
+                        source={{ uri: selectedPost.image }}
+                        style={[
+                          styles.messageImage,
+                          imageLoadState.hasError && { opacity: 0.3 },
+                        ]}
+                        resizeMode="cover"
+                        onLoadStart={() => {
+                          console.log(
+                            "🔄 画像の読み込み開始:",
+                            selectedPost.image
+                          );
+                          setImageLoadState({
+                            isLoading: true,
+                            hasError: false,
+                          });
+                        }}
+                        onLoad={(event) => {
+                          console.log(
+                            "✅ 画像の読み込み成功:",
+                            selectedPost.image
+                          );
+                          console.log("画像サイズ:", event.nativeEvent.source);
+                          setImageLoadState({
+                            isLoading: false,
+                            hasError: false,
+                          });
+                        }}
+                        onError={(error) => {
+                          console.error(
+                            "❌ 画像の読み込み失敗:",
+                            selectedPost.image
+                          );
+                          console.error("エラー詳細:", error.nativeEvent.error);
+                          setImageLoadState({
+                            isLoading: false,
+                            hasError: true,
+                            errorMessage:
+                              error.nativeEvent.error || "不明なエラー",
+                          });
+                        }}
+                        onLoadEnd={() => {
+                          console.log(
+                            "🏁 画像の読み込み完了 (成功/失敗問わず):",
+                            selectedPost.image
+                          );
+                        }}
+                      />
+                    </View>
                   )}
                   <Text style={styles.messageTime}>
                     {selectedPost.timestamp.toLocaleString("ja-JP")}

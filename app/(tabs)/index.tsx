@@ -14,22 +14,26 @@ import {
   SafeAreaView,
   ScrollView,
   Text,
-  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
 import MapView, { Marker } from "react-native-maps";
 
 // 型とユーティリティのインポート
+import { PostDisplayComponent } from "../../components/PostDisplayComponent";
 import { PostModalComponent } from "../../components/PostModalComponent";
 import { getPostsForCoordinates } from "../../components/utils/locationUtils";
 import { getReactionImage } from "../../components/utils/reactionUtils";
 import { styles } from "../../components/utils/styles";
 import { Post } from "../../components/utils/types";
+import { testFirebaseStorageAccess } from "../../debug/storageTest";
 import { useLocationTracking } from "../../hooks/useLocationTracking";
 import { usePostManagement } from "../../hooks/usePostManagement";
+import {
+  uploadImageToStorage,
+  validateImageSize,
+} from "../../services/imageService";
 import { createPost } from "../../services/postService";
-import { uploadImageToStorage, validateImageSize } from "../../services/imageService";
 import { getPersistentUserId } from "../../services/userService";
 
 const { height } = Dimensions.get("window");
@@ -44,7 +48,7 @@ export default function HomeScreen() {
   } | null>(null);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   const [currentUserId, setCurrentUserId] = useState<string>("");
-  
+
   // 画像投稿用の状態管理
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
 
@@ -97,6 +101,11 @@ export default function HomeScreen() {
       const userId = await getPersistentUserId();
       setCurrentUserId(userId);
       console.log("現在のユーザーID:", userId);
+
+      // Firebase Storageアクセステストを実行
+      console.log("Firebase Storageアクセステストを開始...");
+      const testResult = await testFirebaseStorageAccess();
+      console.log("Firebase Storageアクセステスト結果:", testResult);
     };
 
     initializeUserId();
@@ -164,7 +173,8 @@ export default function HomeScreen() {
   const handleImagePicker = async () => {
     try {
       // パーミッションを要求
-      const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      const permissionResult =
+        await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (!permissionResult.granted) {
         alert("フォトライブラリへのアクセスを許可してください");
         return;
@@ -206,29 +216,32 @@ export default function HomeScreen() {
 
     try {
       console.log("画像付き投稿作成開始...");
-      
+
       let photoURL = undefined;
-      
+
       // 画像が選択されている場合はFirebase Storageにアップロード
       if (selectedImage) {
         // 画像サイズをチェック
         const isValidSize = await validateImageSize(selectedImage);
         if (!isValidSize) {
-          Alert.alert("エラー", "画像サイズが10MBを超えています。より小さい画像を選択してください。");
+          Alert.alert(
+            "エラー",
+            "画像サイズが10MBを超えています。より小さい画像を選択してください。"
+          );
           return;
         }
-        
+
         console.log("Firebase Storageに画像をアップロード中...");
         photoURL = await uploadImageToStorage(selectedImage, currentUserId);
-        
+
         if (!photoURL) {
           Alert.alert("エラー", "画像のアップロードに失敗しました");
           return;
         }
-        
+
         console.log("画像アップロード成功:", photoURL);
       }
-      
+
       // createPostを直接呼び出し、画像URLを含める
       const postData = {
         content: newPost.content,
@@ -243,7 +256,7 @@ export default function HomeScreen() {
       const result = await createPost(postData);
       if (result) {
         console.log("画像付き投稿作成成功:", result);
-        
+
         // ローカルの投稿リストに追加
         const newPostObj: Post = {
           id: result.id,
@@ -292,6 +305,16 @@ export default function HomeScreen() {
   }, []);
 
   const handleMarkerPress = (post: Post) => {
+    // ★デバッグ用: マーカー押下時の投稿データを確認
+    console.log("=== マーカー押下デバッグ ===");
+    console.log("選択された投稿ID:", post.id);
+    console.log("選択された投稿内容:", post.content);
+    console.log("選択された投稿作成者:", post.author);
+    console.log("選択された投稿の画像URL:", post.image);
+    console.log("画像URL型:", typeof post.image);
+    console.log("選択された投稿の全データ:", JSON.stringify(post, null, 2));
+    console.log("=========================");
+
     setSelectedLocation(post.location);
     setMessageListVisible(true);
 
@@ -485,246 +508,23 @@ export default function HomeScreen() {
             >
               {getPostsForCoordinates(selectedLocation, posts).map(
                 (post, index) => (
-                  <View
+                  <PostDisplayComponent
                     key={post.id}
-                    style={[styles.messageItemContainer]}
-                    pointerEvents="box-none"
-                  >
-                    {/* 親投稿 */}
-                    <View style={styles.messageItem}>
-                      {/* ユーザーアイコン */}
-                      <View style={styles.userIcon}>
-                        <Ionicons name="person" size={20} color="#666" />
-                      </View>
-                      {/* メッセージ内容 */}
-                      <View style={styles.messageContent}>
-                        <Text style={styles.userName}>{post.author}</Text>
-                        <Text style={styles.messageText}>{post.content}</Text>
-                        {/* 画像表示 */}
-                        {post.image && (
-                          <Image
-                            source={{ uri: post.image }}
-                            style={styles.messageImage}
-                            resizeMode="cover"
-                          />
-                        )}
-                        <Text style={styles.messageTime}>
-                          {post.timestamp.toLocaleString("ja-JP")}
-                        </Text>
-                      </View>
-                      {/* アイコン群 */}
-                      <View style={styles.messageIcons}>
-                        <TouchableOpacity
-                          style={styles.iconButton}
-                          onPress={() =>
-                            setReplyMode &&
-                            setReplyMode(replyMode === post.id ? null : post.id)
-                          }
-                        >
-                          <Ionicons
-                            name="chatbubble-outline"
-                            size={16}
-                            color="#666"
-                          />
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          style={[
-                            styles.iconButton,
-                            post.reactions &&
-                              post.reactions[currentUserId] && {
-                                backgroundColor: "#e3f2fd",
-                                borderRadius: 4,
-                              },
-                          ]}
-                          onPress={() =>
-                            showReactionPicker && showReactionPicker(post.id)
-                          }
-                        >
-                          <Ionicons
-                            name={
-                              post.reactions && post.reactions[currentUserId]
-                                ? "heart"
-                                : "heart-outline"
-                            }
-                            size={16}
-                            color={
-                              post.reactions && post.reactions[currentUserId]
-                                ? "#2196f3"
-                                : "#666"
-                            }
-                          />
-                        </TouchableOpacity>
-                      </View>
-                    </View>
-
-                    {/* リアクション表示 */}
-                    {post.reactionCounts &&
-                      Object.keys(post.reactionCounts).length > 0 && (
-                        <View style={styles.reactionSummary}>
-                          {Object.entries(post.reactionCounts).map(
-                            ([emoji, count]) => (
-                              <View key={emoji} style={styles.reactionItem}>
-                                <Image
-                                  source={getReactionImage(emoji)}
-                                  style={styles.reactionIcon}
-                                  resizeMode="contain"
-                                />
-                                <Text style={styles.reactionCount}>
-                                  {count}
-                                </Text>
-                              </View>
-                            )
-                          )}
-                        </View>
-                      )}
-
-                    {/* リプライ表示 */}
-                    {post.replies && post.replies.length > 0 && (
-                      <View style={styles.replySection}>
-                        <TouchableOpacity
-                          style={styles.replyToggle}
-                          onPress={() => {
-                            console.log(
-                              `リプライトグル: ${post.id}, 現在の状態: ${expandedReplies.has(post.id)}, リプライ数: ${post.replies?.length || 0}`
-                            );
-                            toggleReplies(post.id);
-                          }}
-                        >
-                          <Text style={styles.replyToggleText}>
-                            {expandedReplies.has(post.id)
-                              ? "返信を隠す"
-                              : `返信を表示 (${post.replies?.length || 0})`}
-                          </Text>
-                        </TouchableOpacity>
-
-                        {expandedReplies.has(post.id) && (
-                          <View style={styles.replyList}>
-                            {post.replies.map((reply) => (
-                              <View key={reply.id} style={styles.replyItem}>
-                                <View style={styles.replyUserIcon}>
-                                  <Ionicons
-                                    name="person"
-                                    size={16}
-                                    color="#666"
-                                  />
-                                </View>
-                                <View style={styles.replyContent}>
-                                  <Text style={styles.replyAuthor}>
-                                    {reply.author}
-                                  </Text>
-                                  <Text style={styles.replyText}>
-                                    {reply.content}
-                                  </Text>
-                                  <Text style={styles.replyTime}>
-                                    {reply.timestamp.toLocaleString("ja-JP")}
-                                  </Text>
-
-                                  {/* リプライのリアクション表示 */}
-                                  {reply.reactionCounts &&
-                                    Object.keys(reply.reactionCounts).length >
-                                      0 && (
-                                      <View
-                                        style={[
-                                          styles.reactionSummary,
-                                          { marginLeft: 0, marginTop: 4 },
-                                        ]}
-                                      >
-                                        {Object.entries(
-                                          reply.reactionCounts
-                                        ).map(([emoji, count]) => (
-                                          <View
-                                            key={emoji}
-                                            style={styles.reactionItem}
-                                          >
-                                            <Image
-                                              source={getReactionImage(emoji)}
-                                              style={styles.reactionIcon}
-                                              resizeMode="contain"
-                                            />
-                                            <Text style={styles.reactionCount}>
-                                              {count}
-                                            </Text>
-                                          </View>
-                                        ))}
-                                      </View>
-                                    )}
-                                </View>
-                                <TouchableOpacity
-                                  style={[
-                                    styles.replyReactionButton,
-                                    reply.reactions &&
-                                      reply.reactions[currentUserId] && {
-                                        backgroundColor: "#e3f2fd",
-                                        borderRadius: 4,
-                                      },
-                                  ]}
-                                  onPress={() =>
-                                    showReactionPicker &&
-                                    showReactionPicker(post.id, true, reply.id)
-                                  }
-                                >
-                                  <Ionicons
-                                    name={
-                                      reply.reactions &&
-                                      reply.reactions[currentUserId]
-                                        ? "heart"
-                                        : "heart-outline"
-                                    }
-                                    size={14}
-                                    color={
-                                      reply.reactions &&
-                                      reply.reactions[currentUserId]
-                                        ? "#2196f3"
-                                        : "#666"
-                                    }
-                                  />
-                                </TouchableOpacity>
-                              </View>
-                            ))}
-                          </View>
-                        )}
-                      </View>
-                    )}
-
-                    {/* リプライ入力フォーム */}
-                    {replyMode === post.id && (
-                      <View style={styles.replyInputSection}>
-                        <TextInput
-                          style={styles.replyInput}
-                          placeholder="返信を入力..."
-                          value={newReply.content}
-                          onChangeText={(text) =>
-                            setNewReply({ ...newReply, content: text })
-                          }
-                          multiline
-                          maxLength={200}
-                        />
-                        <View style={styles.replyButtonGroup}>
-                          <TouchableOpacity
-                            style={styles.submitButton}
-                            onPress={() => {
-                              console.log("リプライ送信ボタンが押されました", {
-                                postId: post.id,
-                                content: newReply.content,
-                                contentLength: newReply.content.trim().length,
-                              });
-                              handleReplySubmit(post.id);
-                            }}
-                          >
-                            <Text style={styles.submitButtonText}>返信</Text>
-                          </TouchableOpacity>
-                          <TouchableOpacity
-                            style={styles.cancelButton}
-                            onPress={() => setReplyMode(null)}
-                          >
-                            <Text style={styles.cancelButtonText}>
-                              キャンセル
-                            </Text>
-                          </TouchableOpacity>
-                        </View>
-                      </View>
-                    )}
-                  </View>
+                    post={post}
+                    currentUserId={currentUserId}
+                    expandedReplies={expandedReplies}
+                    replyMode={replyMode}
+                    newReply={newReply}
+                    onToggleReplies={toggleReplies}
+                    onReplyModeChange={setReplyMode}
+                    onNewReplyChange={setNewReply}
+                    onReplySubmit={handleReplySubmit}
+                    onReactionPress={(postId, isReply, replyId) => {
+                      if (showReactionPicker) {
+                        showReactionPicker(postId, isReply, replyId);
+                      }
+                    }}
+                  />
                 )
               )}
 
@@ -767,7 +567,7 @@ export default function HomeScreen() {
         newPost={{
           content: newPost.content,
           author: "", // 投稿者名は自動設定されるため空文字列
-          image: selectedImage || ""
+          image: selectedImage || "",
         }}
         selectedImage={selectedImage}
         onClose={() => {

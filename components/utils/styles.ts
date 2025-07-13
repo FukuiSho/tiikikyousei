@@ -1054,4 +1054,67 @@ export const styles = StyleSheet.create({
     gap: 8,
     marginTop: 8,
   },
+
+  // 画像デバッグ関連のスタイル
+  imageContainer: {
+    position: "relative",
+    marginTop: 8,
+    marginBottom: 4,
+  },
+  imageLoadingContainer: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "rgba(0, 0, 0, 0.1)",
+    justifyContent: "center",
+    alignItems: "center",
+    zIndex: 1,
+    borderRadius: 8,
+  },
+  imageLoadingText: {
+    fontSize: 12,
+    color: "#666",
+    backgroundColor: "white",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 4,
+  },
+  imageErrorContainer: {
+    backgroundColor: "#ffebee",
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: "#ffcdd2",
+  },
+  imageErrorText: {
+    fontSize: 12,
+    color: "#c62828",
+    fontWeight: "600",
+    marginBottom: 4,
+  },
+  imageErrorDetails: {
+    fontSize: 10,
+    color: "#666",
+    marginBottom: 4,
+    fontFamily: "monospace",
+  },
+  imageErrorMessage: {
+    fontSize: 10,
+    color: "#e53935",
+    fontStyle: "italic",
+  },
+
+  // リアクション関連のスタイル（不足分を追加）
+  reactionItemActive: {
+    backgroundColor: "#e3f2fd",
+    borderColor: "#2196f3",
+    borderWidth: 1,
+  },
+  reactionEmoji: {
+    fontSize: 12,
+    marginRight: 4,
+  },
 });
