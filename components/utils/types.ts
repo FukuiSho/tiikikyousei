@@ -97,6 +97,7 @@ export interface UserProfileUpdateData {
 
 export interface PostFormData {
   content: string;
+  image?: string; // 画像URI
 }
 
 // 選択肢の定数定義

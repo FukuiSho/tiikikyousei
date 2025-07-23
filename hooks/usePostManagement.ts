@@ -2,7 +2,10 @@ import * as Location from "expo-location";
 import { useCallback, useState } from "react";
 import { Alert } from "react-native";
 import { Post, PostFormData } from "../components/utils/types";
-import { validateAndConvertImageUrl } from "../services/imageService";
+import {
+  uploadImageToStorage,
+  validateAndConvertImageUrl,
+} from "../services/imageService";
 import {
   createPost,
   createReply,
@@ -59,7 +62,10 @@ export const usePostManagement = ({
   location,
 }: UsePostManagementProps): UsePostManagementReturn => {
   const [posts, setPosts] = useState<Post[]>([]);
-  const [newPost, setNewPost] = useState<PostFormData>({ content: "" });
+  const [newPost, setNewPost] = useState<PostFormData>({
+    content: "",
+    image: undefined,
+  });
   const [newReply, setNewReply] = useState<PostFormData>({ content: "" });
   const [expandedReplies, setExpandedReplies] = useState<Set<string>>(
     new Set()
@@ -87,6 +93,23 @@ export const usePostManagement = ({
 
       try {
         console.log("投稿作成開始...");
+
+        // 画像アップロード処理
+        let photoURL: string | undefined = undefined;
+        if (newPost.image) {
+          console.log("画像をアップロード中...", newPost.image);
+          const uploadResult = await uploadImageToStorage(
+            newPost.image,
+            currentUserId
+          );
+          if (!uploadResult) {
+            Alert.alert("エラー", "画像のアップロードに失敗しました");
+            return;
+          }
+          photoURL = uploadResult;
+          console.log("画像アップロード完了:", photoURL);
+        }
+
         const postData = {
           content: newPost.content,
           location: {
@@ -94,6 +117,7 @@ export const usePostManagement = ({
             longitude: location.coords.longitude,
           },
           userId: currentUserId,
+          photoURL: photoURL, // 画像URLを追加（createPostの型に合わせる）
         };
 
         const result = await createPost(postData);
@@ -122,7 +146,7 @@ export const usePostManagement = ({
         Alert.alert("エラー", "投稿の作成に失敗しました");
       }
     },
-    [newPost.content, location, currentUserId]
+    [newPost.content, newPost.image, location, currentUserId]
   );
 
   const handleReplySubmit = useCallback(
@@ -539,7 +563,7 @@ export const usePostManagement = ({
   }, []);
 
   const handleCancelPost = useCallback(() => {
-    setNewPost({ content: "" });
+    setNewPost({ content: "", image: undefined });
   }, []);
 
   return {

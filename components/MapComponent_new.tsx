@@ -59,7 +59,7 @@ export const MapComponent: React.FC<MapComponentProps> = ({
   return (
     <View style={styles.mapContainer}>
       {location ? (
-        <View style={{ flex: 1, position: 'relative' }}>
+        <View style={{ flex: 1, position: "relative" }}>
           {/* マップビュー */}
           <MapView
             ref={mapRef}
@@ -94,24 +94,26 @@ export const MapComponent: React.FC<MapComponentProps> = ({
           </MapView>
 
           {/* 絶対配置オーバーレイ - テストバブル */}
-          <View style={{
-            position: 'absolute',
-            top: 50,
-            left: 50,
-            width: 200,
-            height: 100,
-            backgroundColor: 'red',
-            zIndex: 999999,
-            justifyContent: 'center',
-            alignItems: 'center',
-            borderWidth: 5,
-            borderColor: 'yellow',
-            borderRadius: 10,
-          }}>
-            <Text style={{ color: 'white', fontSize: 16, fontWeight: 'bold' }}>
+          <View
+            style={{
+              position: "absolute",
+              top: 50,
+              left: 50,
+              width: 200,
+              height: 100,
+              backgroundColor: "red",
+              zIndex: 999999,
+              justifyContent: "center",
+              alignItems: "center",
+              borderWidth: 5,
+              borderColor: "yellow",
+              borderRadius: 10,
+            }}
+          >
+            <Text style={{ color: "white", fontSize: 16, fontWeight: "bold" }}>
               🚨 テストバブル 🚨
             </Text>
-            <Text style={{ color: 'white', fontSize: 12 }}>
+            <Text style={{ color: "white", fontSize: 12 }}>
               表示されています！
             </Text>
           </View>
@@ -119,12 +121,12 @@ export const MapComponent: React.FC<MapComponentProps> = ({
           {/* 投稿バブルオーバーレイ */}
           {posts.slice(0, 6).map((post, index) => {
             console.log(`🟢 バブル${index}作成中: ID=${post.id}`);
-            
+
             return (
               <View
                 key={`bubble-${post.id}`}
                 style={{
-                  position: 'absolute',
+                  position: "absolute",
                   top: 150 + (index % 3) * 120,
                   left: 50 + (index % 2) * 180,
                   zIndex: 999998,

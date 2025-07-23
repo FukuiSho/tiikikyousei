@@ -1055,58 +1055,6 @@ export const styles = StyleSheet.create({
     marginTop: 8,
   },
 
-  // 画像デバッグ関連のスタイル
-  imageContainer: {
-    position: "relative",
-    marginTop: 8,
-    marginBottom: 4,
-  },
-  imageLoadingContainer: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: "rgba(0, 0, 0, 0.1)",
-    justifyContent: "center",
-    alignItems: "center",
-    zIndex: 1,
-    borderRadius: 8,
-  },
-  imageLoadingText: {
-    fontSize: 12,
-    color: "#666",
-    backgroundColor: "white",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 4,
-  },
-  imageErrorContainer: {
-    backgroundColor: "#ffebee",
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 8,
-    borderWidth: 1,
-    borderColor: "#ffcdd2",
-  },
-  imageErrorText: {
-    fontSize: 12,
-    color: "#c62828",
-    fontWeight: "600",
-    marginBottom: 4,
-  },
-  imageErrorDetails: {
-    fontSize: 10,
-    color: "#666",
-    marginBottom: 4,
-    fontFamily: "monospace",
-  },
-  imageErrorMessage: {
-    fontSize: 10,
-    color: "#e53935",
-    fontStyle: "italic",
-  },
-
   // リアクション関連のスタイル（不足分を追加）
   reactionItemActive: {
     backgroundColor: "#e3f2fd",
@@ -1116,5 +1064,59 @@ export const styles = StyleSheet.create({
   reactionEmoji: {
     fontSize: 12,
     marginRight: 4,
+  },
+
+  // 投稿バブル関連のスタイル - シンプル版
+  postBubble: {
+    backgroundColor: "#FFFF00", // 黄色
+    borderRadius: 8,
+    padding: 12,
+    minWidth: 120,
+    maxWidth: 200,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 8,
+    borderWidth: 2,
+    borderColor: "#FF0000", // 赤いボーダー
+  },
+  postBubbleContent: {
+    flex: 1,
+  },
+  postBubbleOverlay: {
+    position: "absolute",
+    zIndex: 1000,
+  },
+  postAuthor: {
+    fontSize: 14,
+    fontWeight: "bold",
+    marginBottom: 4,
+    color: "black",
+  },
+  postContent: {
+    fontSize: 12,
+    color: "black",
+    lineHeight: 16,
+  },
+  imageIndicator: {
+    width: 12,
+    height: 12,
+    backgroundColor: "#FF0000",
+    borderRadius: 6,
+    position: "absolute",
+    top: 4,
+    right: 4,
+  },
+
+  // バブル表示用のコンテナ
+  bubbleContainer: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 9999,
+    pointerEvents: "none", // タッチイベントを通す
   },
 });
