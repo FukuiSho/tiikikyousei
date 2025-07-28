@@ -1,9 +1,7 @@
-----------
+---
 Copyright (c) 2025 Sho Fukui, Toi Kita, Nina Nakayama, Shota Kondo, Hibiki Nakao, Sora Takeda
 このソースコードは自由に使用、複製、改変、再配布することができます。
 ただし、著作権表示は削除しないでください。
----
-
 ---
 
 # Welcome to your Expo app 👋
